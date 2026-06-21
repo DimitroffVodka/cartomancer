@@ -21,7 +21,7 @@
     { "lang": "en", "name": "English", "path": "i18n/en.json" }
   ],
   "packs": [],
-  "url": "",
+  "url": "https://github.com/DimitroffVodka/cartomancer",
   "manifest": "",
   "download": ""
 }

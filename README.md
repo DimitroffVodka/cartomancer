@@ -4,11 +4,12 @@ A **system-agnostic** Foundry VTT module that runs [Watabou](https://watabou.itc
 map generators *inside* Foundry and imports the result as a playable scene — walls,
 doors, multi-level floors, and stair regions included. No game system required.
 
-> **Status: pre-release / private (Phases A–B done).** Extracted from the `shadowdark-extras`
-> module. **Do not publish or list on a package registry yet** — see
-> [`dev/LICENSING.md`](dev/LICENSING.md): the bundled generators (except the GPL-3
-> city) need the authors' permission to redistribute. Output (the maps) is already
-> free per Watabou's FAQ; this gate is only about shipping the generator *app code*.
+> **Status: public dev preview (Phases A–B done).** Extracted from `shadowdark-extras`.
+> Not a packaged release yet — there is no Foundry manifest / Releases, and it should
+> **not be listed on a package registry yet**: per [`dev/LICENSING.md`](dev/LICENSING.md)
+> the bundled generators (except the GPL-3 City) need the authors' permission to
+> redistribute. The maps you make are already free per Watabou's FAQ; this gate is
+> only about shipping the generator *app code*.
 
 ## Generators
 
@@ -18,6 +19,12 @@ Dwelling — matching <https://watabou.github.io/>.
 Cave, Dungeon, and Dwelling import as **playable scenes** with walls (and the
 Dwelling as a multi-level scene with doors, a basement, named floors, and
 up/down spiral-staircase regions). Realm/City/Village import as image scenes.
+
+**Realm import** (Perilous Shores) can optionally turn a whole region into a Foundry
+folder: the realm map as a scene, **Note pins** on each linked location, and
+cross-linked **journals** for every city/village/dungeon. Each location's map is
+generated **on demand** from its own seed (one click in its journal), and a dungeon's
+room key (story + numbered rooms) is folded into its journal.
 
 ## Use
 
