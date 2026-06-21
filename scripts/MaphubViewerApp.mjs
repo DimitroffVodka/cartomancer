@@ -927,6 +927,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			let mapPx = (x, y) => ({ x: Math.round(x), y: Math.round(y) });
 			let align = null;
 			let dungeonToPixel = null;
+			let caveDpr = 1;
 			if (isDungeon) {
 				dungeonTransform = this._getDungeonTransform();
 				if (!dungeonTransform) {
@@ -942,7 +943,14 @@ export class MaphubViewerApp extends ApplicationV2 {
 				// Cell-zero edge sits at backing toPixel(0,0).
 				align = { toPixel: dungeonToPixel, cellPx: dungeonTransform.cellPx * dpr, origin: dungeonToPixel(0, 0) };
 			} else if (isCave) {
-				align = this._getCaveAlignSource();
+				const ca = this._getCaveAlignSource();
+				if (ca) {
+					// Same HiDPI correction as the dungeon: the cave render transform is in
+					// CSS/stage px, but the captured PNG is the backing store (× dpr).
+					const cc = this._iframe?.contentDocument?.querySelector("canvas");
+					caveDpr = (cc && cc.clientWidth > 0) ? (cc.width / cc.clientWidth) : (this._iframe?.contentWindow?.devicePixelRatio || 1);
+					align = { toPixel: ca.toPixel, cellPx: ca.cellPx * caveDpr, origin: { x: ca.origin.x * caveDpr, y: ca.origin.y * caveDpr } };
+				}
 			}
 
 			if (align && align.cellPx > 0) {
@@ -985,10 +993,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 			} else if (isDwellings) {
 				walls = this._getDwellingsWalls({ width: scene.width, height: scene.height, grid });
 			} else if (isCave) {
-				// _getCaveWalls returns captured-canvas px; run them through mapPx.
+				// _getCaveWalls returns CSS px; scale to backing (× dpr) to match the image, then mapPx.
 				walls = this._getCaveWalls().map(w => {
-					const a = mapPx(w.c[0], w.c[1]);
-					const b = mapPx(w.c[2], w.c[3]);
+					const a = mapPx(w.c[0] * caveDpr, w.c[1] * caveDpr);
+					const b = mapPx(w.c[2] * caveDpr, w.c[3] * caveDpr);
 					return { ...w, c: [a.x, a.y, b.x, b.y] };
 				});
 			}
