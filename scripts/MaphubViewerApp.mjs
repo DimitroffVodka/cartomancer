@@ -926,13 +926,21 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// scale+crop to any captured-canvas pixel.
 			let mapPx = (x, y) => ({ x: Math.round(x), y: Math.round(y) });
 			let align = null;
+			let dungeonToPixel = null;
 			if (isDungeon) {
 				dungeonTransform = this._getDungeonTransform();
 				if (!dungeonTransform) {
 					throw new Error("One Page Dungeon render transform was not available. Reopen the generator (bundled local files) and try again.");
 				}
-				// Cell-zero edge sits at canvas toPixel(0,0) == (M.tx, M.ty).
-				align = { toPixel: dungeonTransform.toPixel, cellPx: dungeonTransform.cellPx, origin: dungeonTransform.toPixel(0, 0) };
+				// The render transform (toPixel/cellPx) is in CSS/stage px, but the captured
+				// PNG is the canvas BACKING store (× devicePixelRatio). Scale to backing px so
+				// the walls match the image instead of coming out 1/dpr too small and offset.
+				const srcCanvas = this._iframe?.contentDocument?.querySelector("canvas");
+				const dpr = (srcCanvas && srcCanvas.clientWidth > 0) ? (srcCanvas.width / srcCanvas.clientWidth) : (this._iframe?.contentWindow?.devicePixelRatio || 1);
+				const Tcss = dungeonTransform.toPixel;
+				dungeonToPixel = (gx, gy) => { const p = Tcss(gx, gy); return { x: p.x * dpr, y: p.y * dpr }; };
+				// Cell-zero edge sits at backing toPixel(0,0).
+				align = { toPixel: dungeonToPixel, cellPx: dungeonTransform.cellPx * dpr, origin: dungeonToPixel(0, 0) };
 			} else if (isCave) {
 				align = this._getCaveAlignSource();
 			}
@@ -960,7 +968,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			if (isDungeon) {
 				try {
 					const parsed = OnePageParserSD.parseDungeonData(this._lastSavedDungeonJson, 1, { gridSpace: true });
-					const T = dungeonTransform.toPixel;
+					const T = dungeonToPixel;
 					walls = (parsed.walls || []).map(w => {
 						const t0 = T(w.c[0], w.c[1]); const a = mapPx(t0.x, t0.y);
 						const t1 = T(w.c[2], w.c[3]); const b = mapPx(t1.x, t1.y);
