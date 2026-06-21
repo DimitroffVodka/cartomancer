@@ -9,9 +9,13 @@ const STYLES = `
 .sdx-ddpack-settings{padding:14px 16px 16px;background:#151515;color:#ddd;display:flex;flex-direction:column;gap:12px}
 .sdx-ddpack-top{display:flex;flex-direction:column;gap:10px}
 .sdx-ddpack-top p{margin:0;color:#c6b8a0;font-size:14px;line-height:1.35;max-width:64ch}
-.sdx-ddpack-toolbar{display:flex;justify-content:flex-end}
-.sdx-ddpack-add{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:128px;border:1px solid #4a6630;background:#1d2b14;color:#b9e58a;border-radius:5px;padding:7px 12px;cursor:pointer;white-space:nowrap;font-weight:600}
-.sdx-ddpack-add i{font-size:13px}
+.sdx-ddpack-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sdx-ddpack-url{flex:1;min-width:200px;background:#1c1c1c;border:1px solid #444;color:#e0d0a8;border-radius:5px;padding:7px 10px}
+.sdx-ddpack-url-btn,.sdx-ddpack-add{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #4a6630;background:#1d2b14;color:#b9e58a;border-radius:5px;padding:7px 12px;cursor:pointer;white-space:nowrap;font-weight:600}
+.sdx-ddpack-url-btn{border-color:#3a5570;background:#142233;color:#9cc6f0}
+.sdx-ddpack-add{min-width:120px}
+.sdx-ddpack-add i,.sdx-ddpack-url-btn i{font-size:13px}
+.sdx-ddpack-hint{font-size:11px;color:#888}
 .sdx-ddpack-list{display:flex;flex-direction:column;gap:8px}
 .sdx-ddpack-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:#202020;border:1px solid #333;border-radius:5px;padding:8px}
 .sdx-ddpack-row.sdx-ddpack-hidden{background:#1b1b1b;border-color:#2b2b2b}
@@ -58,10 +62,13 @@ export class DDPackSettingsApp extends ApplicationV2 {
         el.className = "sdx-ddpack-settings";
         el.innerHTML = `
             <div class="sdx-ddpack-top">
-                <p>Import Dungeondraft object packs into the SDX Decor tray. Disabling a pack hides it; extracted files remain in <code>Data/${DD_DECOR_BASE}/</code>.</p>
+                <p>Import Dungeondraft object packs to use their decor in the Cartomancer decor browser. Disabling a pack hides it; extracted files remain in <code>Data/${DD_DECOR_BASE}/</code>.</p>
                 <div class="sdx-ddpack-toolbar">
+                    <input type="url" class="sdx-ddpack-url" placeholder="Paste a direct .dungeondraft_pack URL…">
+                    <button type="button" class="sdx-ddpack-url-btn"><i class="fas fa-link"></i> Import from URL</button>
                     <button type="button" class="sdx-ddpack-add"><i class="fas fa-plus"></i> Add Pack</button>
                 </div>
+                <div class="sdx-ddpack-hint">A direct file link only — the host must allow cross-origin download. Login-gated store links won't work; download those and use “Add Pack”.</div>
                 <input class="sdx-ddpack-file" type="file" accept=".dungeondraft_pack">
             </div>
             ${this.status ? `<div class="sdx-ddpack-meta">${escapeHtml(this.status)}</div>` : ""}
@@ -98,6 +105,10 @@ export class DDPackSettingsApp extends ApplicationV2 {
             if (!file) return;
             await this.#importPack(file);
         });
+
+        const urlInput = this.element.querySelector(".sdx-ddpack-url");
+        this.element.querySelector(".sdx-ddpack-url-btn")?.addEventListener("click", () => this.#importFromUrl(urlInput?.value));
+        urlInput?.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); this.#importFromUrl(urlInput.value); } });
 
         this.element.querySelectorAll(".sdx-ddpack-row").forEach(row => {
             const packId = row.dataset.packId;
@@ -149,5 +160,29 @@ export class DDPackSettingsApp extends ApplicationV2 {
             this.status = "";
             this.render();
         }
+    }
+
+    async #importFromUrl(url) {
+        url = String(url || "").trim();
+        if (!/^https?:\/\//i.test(url)) { ui.notifications.warn("Paste a full http(s) link to a .dungeondraft_pack file."); return; }
+        this.status = "Downloading pack…";
+        this.render();
+        let file;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const blob = await resp.blob();
+            let name = "";
+            try { name = decodeURIComponent((new URL(url).pathname.split("/").pop()) || ""); } catch { /* keep default */ }
+            if (!/\.dungeondraft_pack$/i.test(name)) name = `${name || "pack"}.dungeondraft_pack`;
+            file = new File([blob], name, { type: "application/octet-stream" });
+        } catch (err) {
+            console.error(`${MODULE_ID} | URL pack download failed:`, err);
+            this.status = "";
+            this.render();
+            ui.notifications.error(`Couldn't download the pack: ${err?.message || err}. The host may block cross-origin downloads — download the file and use the "Add Pack" button.`);
+            return;
+        }
+        await this.#importPack(file);
     }
 }
