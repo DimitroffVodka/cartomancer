@@ -113,7 +113,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
         const meta = this.scan.meta;
         const selectedCount = this.selected.size;
         const progress = this.extracting
-            ? `<div class="sdx-ddp-progress"><div class="sdx-ddp-bar"><div class="sdx-ddp-fill" style="width:${this.total ? Math.round(this.progress / this.total * 100) : 0}%"></div></div><div>${escapeHtml(this.status)}</div></div>`
+            ? `<div class="sdx-ddp-progress"><div class="sdx-ddp-bar"><div class="sdx-ddp-fill" style="width:${this.total ? Math.round(this.progress / this.total * 100) : 0}%"></div></div><div class="sdx-ddp-status">${escapeHtml(this.status)}</div></div>`
             : "";
         const el = document.createElement("div");
         el.className = "sdx-ddp-wrap";
@@ -350,7 +350,12 @@ export class DDPackPreviewApp extends ApplicationV2 {
                 this.progress = done;
                 this.total = total;
                 this.status = `Extracting... ${done} / ${total}`;
-                if ((done % 20 === 0 || done === total) && this.rendered) this.render();
+                // Update the overlay in place — a full render() per tick would rebuild
+                // the entire thumbnail grid + IntersectionObserver.
+                const fill = this.element?.querySelector(".sdx-ddp-fill");
+                if (fill) fill.style.width = `${total ? Math.round(done / total * 100) : 0}%`;
+                const statusEl = this.element?.querySelector(".sdx-ddp-status");
+                if (statusEl) statusEl.textContent = this.status;
             }, selectedPaths, this.scan.buffer);   // reuse the scan buffer — no second read
             await upsertDDPack(indexData);
             /* decor browser refreshes via the cartomancer.decorAssetsImported hook */

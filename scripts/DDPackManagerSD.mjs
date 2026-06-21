@@ -248,7 +248,10 @@ export async function loadDDPackDecorTiles() {
 
             for (const filePath of listing.files || []) {
                 if (!/\.(png|webp)$/i.test(filePath)) continue;
-                const filename = filePath.split("/").pop() || "";
+                // FilePicker.browse() returns URL-encoded paths; decode the filename
+                // for the DISPLAY label only (keep filePath encoded for the texture src).
+                let filename = filePath.split("/").pop() || "";
+                try { filename = decodeURIComponent(filename); } catch { /* keep as-is */ }
                 const groupLabel = pack.folderLabel || pack.name || pack.packId;
                 const categoryLabel = category ? `${groupLabel} / ${category}` : groupLabel;
                 const categoryKey = category
