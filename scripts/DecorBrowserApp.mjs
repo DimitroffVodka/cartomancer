@@ -90,7 +90,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             this.open = prevOpen;
             if (!this.#nodeByKey(prevView)) this.viewKey = this.tree[0]?.key ?? null;
             this.loading = false;
-            this.render();
+            this.#refreshView();   // targeted — don't rebuild the head/search input
         };
 
         // Native DOM drag-drop onto the canvas board element.
@@ -98,16 +98,21 @@ export class DecorBrowserApp extends ApplicationV2 {
         this._boardDrop = async (ev) => {
             let payload;
             try { payload = JSON.parse(ev.dataTransfer.getData("text/plain")); } catch { return; }
-            if (payload?.type !== "Tile" || !payload.cartomancerDecor || !payload.src) return;
+            // Custom (non-core) drop type so Foundry's canvas #onDrop never routes it
+            // through the Tile drop pipeline — we create the Tile ourselves below.
+            if (payload?.type !== "cartomancerDecor" || !payload.src) return;
             ev.preventDefault();
+            if (!canvas?.ready || !canvas?.scene) { ui.notifications.warn("No active scene to place decor on."); return; }
             this._dragPackId = payload.packId || null;
             const { x, y } = this.#clientToScene(ev.clientX, ev.clientY);
             await this.#placeTileAt(payload.src, x, y);
         };
     }
 
-    async _preFirstRender(context, options) {
-        await super._preFirstRender?.(context, options);
+    // v14 ignores _preFirstRender's return value — _canRender is the documented
+    // render-abort hook (return false). openDecorBrowser() also GM-gates the API
+    // path so a blocked non-GM never leaves a stuck singleton.
+    _canRender(options) {
         if (!game.user.isGM) {
             ui.notifications.warn("Only a GM can open the Decor Browser.");
             return false;
@@ -150,7 +155,7 @@ export class DecorBrowserApp extends ApplicationV2 {
         const search = root.querySelector(".cdx-decor-search");
         search?.addEventListener("input", (e) => this.#onSearch(e.target.value));
         search?.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") { e.target.value = ""; this.query = ""; this.#renderAssets(); }
+            if (e.key === "Escape") { clearTimeout(this._searchTimer); e.target.value = ""; this.query = ""; this.#renderAssets(); }
         });
         root.querySelector("[data-action='import-packs']")?.addEventListener("click", () => this.#openImport());
         root.querySelector("[data-action='place-center']")?.addEventListener("click", () => this.#placeAtView());
@@ -196,8 +201,15 @@ export class DecorBrowserApp extends ApplicationV2 {
             this.tree = [];
         } finally {
             this.loading = false;
-            this.render();
+            this.#refreshView();   // targeted — don't rebuild the head/search input
         }
+    }
+
+    // Re-render tree + grid in place; preserves the head toolbar (and search focus/caret).
+    #refreshView() {
+        if (!this.element) return;
+        this.#renderTree();
+        this.#renderAssets();
     }
 
     // category = "ddpack/<packId>/<a>/<b>/…" or "ddpack/<packId>/__root__" (segments already decoded).
@@ -358,7 +370,9 @@ export class DecorBrowserApp extends ApplicationV2 {
             });
             card.addEventListener("dragstart", (ev) => {
                 this._dragPackId = tile?.packId || null;
-                ev.dataTransfer.setData("text/plain", JSON.stringify({ type: "Tile", cartomancerDecor: true, src: tile.path, packId: tile.packId }));
+                // type:"cartomancerDecor" (NOT "Tile") + no texture.src so core's canvas
+                // drop handler ignores it — _boardDrop places the Tile itself.
+                ev.dataTransfer.setData("text/plain", JSON.stringify({ type: "cartomancerDecor", src: tile.path, packId: tile.packId }));
                 ev.dataTransfer.effectAllowed = "copy";
             });
         });
@@ -390,7 +404,8 @@ export class DecorBrowserApp extends ApplicationV2 {
                 return { x: p.x, y: p.y };
             }
         } catch { /* fall through */ }
-        const t = canvas.stage.worldTransform;
+        const t = canvas?.stage?.worldTransform;
+        if (!t) return { x: 0, y: 0 };
         return { x: (clientX - t.tx) / t.a, y: (clientY - t.ty) / t.d };
     }
 
@@ -404,7 +419,11 @@ export class DecorBrowserApp extends ApplicationV2 {
             texture: { src, anchorX: 0, anchorY: 0 },   // anchors 0 => x/y are the top-left corner
             x: Math.round(sceneX - width / 2),
             y: Math.round(sceneY - height / 2),
-            width, height, rotation: 0, sort: 3, elevation,
+            width, height, rotation: 0, sort: 3,
+            // v1: single elevation only. On a multi-level scene this renders on every
+            // floor — set the toolbar Elevation to the target floor as a workaround.
+            // (Binding to a Levels range is a planned follow-up.)
+            elevation,
             flags: { [MODULE_ID]: { decorBrowser: true, packId: this._dragPackId || null } }
         };
     }

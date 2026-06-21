@@ -13,8 +13,9 @@ export async function openDDPackSettings() {
 	new DDPackSettingsApp().render(true);
 }
 
-/** Open the decor browser (browse imported DungeonDraft decor, place on a scene). Singleton. */
+/** Open the decor browser (browse imported DungeonDraft decor, place on a scene). GM-only singleton. */
 export async function openDecorBrowser() {
+	if (!game.user?.isGM) { ui.notifications.warn("Only a GM can open the Decor Browser."); return; }
 	const { DecorBrowserApp } = await import("./DecorBrowserApp.mjs");
 	(DecorBrowserApp._instance ??= new DecorBrowserApp()).render(true);
 }
