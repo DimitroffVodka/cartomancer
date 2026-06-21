@@ -22,30 +22,29 @@ Hooks.once("ready", () => {
 	console.log(`${MODULE_ID} | ready — game.modules.get("${MODULE_ID}").api.openLauncher()`);
 });
 
-// Primary launch surface: a GM-only Scene Controls group. v13/v14 pass `controls`
-// as an object keyed by control name; each control's `tools` is also an object.
+// Launch surface: a GM-only momentary BUTTON tool added to the existing Tokens
+// control group. It must NOT be that group's active tool — core's #onChangeTool
+// early-returns when the clicked tool IS the active tool (`tool === this.tool`),
+// which is why a stand-alone control whose activeTool was the launcher only fired
+// once. As a button inside Tokens (active tool stays "select"), it re-fires on
+// every click. v13/v14 pass `controls` as an object keyed by control name; each
+// control's `tools` is also an object (older builds used arrays — handle both).
 Hooks.on("getSceneControlButtons", (controls) => {
 	if (!game.user?.isGM) return;
 	try {
-		controls[MODULE_ID] = {
-			name: MODULE_ID,
-			title: "Cartomancer",
+		const group = controls?.tokens
+			?? (Array.isArray(controls) ? controls.find(c => c.name === "tokens") : Object.values(controls || {})[0]);
+		if (!group?.tools) return;
+		const tool = {
+			name: "cartomancer-launcher",
+			title: "Cartomancer — Map Generators",
 			icon: "fas fa-compass-drafting",
-			order: 100,
+			button: true,
+			order: 900,
 			visible: true,
-			activeTool: "launcher",
-			tools: {
-				launcher: {
-					name: "launcher",
-					title: "Map Generators",
-					icon: "fas fa-wand-magic-sparkles",
-					order: 1,
-					button: true,
-					visible: true,
-					onChange: () => openLauncher(),
-					onClick: () => openLauncher(),
-				},
-			},
+			onChange: () => openLauncher(),
 		};
+		if (Array.isArray(group.tools)) group.tools.push(tool);
+		else group.tools[tool.name] = tool;
 	} catch (e) { console.error(`${MODULE_ID} | getSceneControlButtons failed`, e); }
 });
