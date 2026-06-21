@@ -100,6 +100,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             catch (e) { console.error(`${MODULE_ID} | reload decor failed`, e); this.allTiles = []; }
             this.tree = this.#buildTree(this.allTiles);
             this.open = prevOpen;
+            if (!Object.keys(this.open).length && this.tree[0]) this.open[this.tree[0].key] = true;
             if (!this.#nodeByKey(prevView)) this.viewKey = this.tree[0]?.key ?? null;
             this.loading = false;
             this.#refreshView();   // targeted — don't rebuild the head/search input
@@ -235,6 +236,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             this.allTiles = await loadDDPackDecorTiles();
             this.tree = this.#buildTree(this.allTiles);
             this.viewKey = this.tree[0]?.key ?? null;
+            if (this.tree[0]) this.open[this.tree[0].key] = true;   // first pack open so categories show
         } catch (e) {
             console.error(`${MODULE_ID} | loadDDPackDecorTiles failed`, e);
             this.allTiles = [];
@@ -315,14 +317,14 @@ export class DecorBrowserApp extends ApplicationV2 {
         row.style.paddingLeft = `${8 + depth * 14}px`;
         row.dataset.key = node.key;
         const icon = hasChildren ? (this.open[node.key] ? "fa-folder-open" : "fa-folder") : "fa-images";
-        const countLabel = node.disabled ? "(hidden)" : `(${this.#nodeCount(node)})`;
+        const countLabel = node.disabled ? "(hidden — click to show)" : `(${this.#nodeCount(node)})`;
         row.innerHTML = `<i class="fas ${icon}"></i><span class="label" title="${escapeHtml(node.key)}">${escapeHtml(node.label)}</span><span class="count">${countLabel}</span>`;
 
         if (isPackRoot) {
             const enabled = !node.disabled;
             const eye = document.createElement("i");
             eye.className = `fas ${enabled ? "fa-eye" : "fa-eye-slash"} cdx-decor-eye`;
-            eye.title = enabled ? "Hide this pack" : "Show this pack";
+            eye.title = enabled ? "Hide this pack from the browser" : "Show this pack";
             eye.addEventListener("click", async (ev) => {
                 ev.stopPropagation();
                 await setDDPackEnabled(node.packId, !enabled);
@@ -333,6 +335,9 @@ export class DecorBrowserApp extends ApplicationV2 {
 
         row.addEventListener("click", (ev) => {
             if (ev.target.closest(".cdx-decor-eye")) return;
+            // A hidden pack: clicking anywhere on the row re-enables it (recoverable —
+            // not just the small eye icon).
+            if (node.disabled) { setDDPackEnabled(node.packId, true).then(() => Hooks.callAll(REFRESH_HOOK)); return; }
             if (hasChildren) this.open[node.key] = !this.open[node.key];
             this.viewKey = node.key;
             this.#renderTree();
