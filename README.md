@@ -4,7 +4,7 @@ A **system-agnostic** Foundry VTT module that runs [Watabou](https://watabou.itc
 map generators *inside* Foundry and imports the result as a playable scene — walls,
 doors, multi-level floors, and stair regions included. No game system required.
 
-> **Status: pre-release / private (Phase A).** Extracted from the `shadowdark-extras`
+> **Status: pre-release / private (Phases A–B done).** Extracted from the `shadowdark-extras`
 > module. **Do not publish or list on a package registry yet** — see
 > [`dev/LICENSING.md`](dev/LICENSING.md): the bundled generators (except the GPL-3
 > city) need the authors' permission to redistribute. Output (the maps) is already
@@ -29,6 +29,25 @@ game.modules.get("cartomancer").api.openLauncher();
 ```
 
 Pick a generator, tweak the map, then **Import Scene**.
+
+## Decor (DungeonDraft packs)
+
+Cartomancer can use **DungeonDraft** `.dungeondraft_pack` object packs as decor —
+**no art is bundled**; you import your own. GM only.
+
+**Import** (Module Settings → Cartomancer → *Manage Packs*, or the *Import Packs*
+button in the decor browser):
+- **Add Pack** — pick a downloaded `.dungeondraft_pack` file.
+- **Import from URL** — paste a *direct* file link (the host must allow cross-origin
+  download; login-gated store links won't work — download those and use Add Pack).
+
+A preview opens: tick a single object, a whole category, or **Extract All**.
+
+**Place** — open the **Decor Browser** (shapes icon in the Tokens controls). Drill
+the folder tree (drag the divider to widen it), then **drag a thumbnail onto the
+scene**, or click one and hit **Place at view**. Scale / elevation / grid-snap are
+in the toolbar. Hide a pack with its eye toggle; click a hidden pack's row to show
+it again.
 
 ## Roadmap
 
