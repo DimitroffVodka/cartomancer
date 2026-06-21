@@ -7,19 +7,40 @@ export async function openLauncher() {
 	new MaphubLauncherApp().render(true);
 }
 
+/** Open the DungeonDraft pack manager (import / enable / remove decor packs). */
+export async function openDDPackSettings() {
+	const { DDPackSettingsApp } = await import("./DDPackSettingsAppSD.mjs");
+	new DDPackSettingsApp().render(true);
+}
+
 Hooks.once("init", () => {
 	game.settings.register(MODULE_ID, "settlement.useLocalMaphub", {
 		name: "Use bundled (local) generators",
 		hint: "Run the bundled Watabou generators from inside Foundry — required for scene/wall/level import (the hosted pages can't be captured cross-origin). Turn off to load watabou.github.io directly (view-only).",
 		scope: "world", config: true, type: Boolean, default: true,
 	});
+	// DungeonDraft decor packs (no packs are bundled — users import their own).
+	game.settings.register(MODULE_ID, "decorDungeondraftPacks", {
+		scope: "world", config: false, type: Array, default: [],
+	});
+	game.settings.registerMenu(MODULE_ID, "decorDungeondraftPacksMenu", {
+		name: "DungeonDraft Decor Packs",
+		label: "Manage Packs",
+		hint: "Import DungeonDraft (.dungeondraft_pack) object packs and use their decor on your maps. No packs are bundled.",
+		icon: "fas fa-cubes",
+		restricted: true,
+		type: class extends foundry.applications.api.ApplicationV2 {
+			static DEFAULT_OPTIONS = { id: "cartomancer-ddpack-menu-stub", window: { title: "" } };
+			async render() { openDDPackSettings(); return this; }
+		},
+	});
 });
 
 Hooks.once("ready", () => {
 	try { registerMaphubHooks(); } catch (e) { console.error(`${MODULE_ID} | registerMaphubHooks failed`, e); }
 	const mod = game.modules.get(MODULE_ID);
-	if (mod) mod.api = { openLauncher };
-	console.log(`${MODULE_ID} | ready — game.modules.get("${MODULE_ID}").api.openLauncher()`);
+	if (mod) mod.api = { openLauncher, openDDPackSettings };
+	console.log(`${MODULE_ID} | ready — api: openLauncher(), openDDPackSettings()`);
 });
 
 // Launch surface: a GM-only momentary BUTTON tool added to the existing Tokens
