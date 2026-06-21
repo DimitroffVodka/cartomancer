@@ -1,0 +1,60 @@
+{
+	primary : ["common", "guest", "kitchen"],
+	generic	: ["guest", "dormitory", "hall"],
+	rooms : {
+		common : {
+			name	: "common room",
+			minSize	: 4,
+			maxNarr	: 0.5,
+			entrance: true,
+			fill	: "0.5, 0.4, 2, 0.9, 0.2, 0.7, 0.3"
+		},
+		guest : {
+			name	: "guest room",
+			minSize	: 4,
+			maxSize	: 6,
+			maxNarr	: 0.5,
+			entrance: false,
+			basement: false,
+			maxDoors: 1,
+			doors	: "regular",
+			fill	: "0.5, 1, 1, 0.8, 1, 0.9, 0.3"
+		},
+
+		cellar : {
+			minSize	: 5,
+			maxNarr	: 0.9,
+			basement: true,
+			fill	: "0.25, 0.5, 1, 0.2, 0, 0.1, 10"
+		},
+		dormitory : {
+			minSize	: 4,
+			entrance: false,
+			basement: false,
+			maxDoors: 1,
+			doors	: "regular",
+			fill	: "0.5, 1, 1, 0.8, 1, 0.9, 0.3"
+		},
+		hall : {
+			minSize	: 2,
+			maxSize	: 4,
+			entrance: true
+		},
+		kitchen : {
+			minSize	: 4,
+			maxSize	: 6,
+			maxNarr	: 0.5,
+			maxDoors: 2,
+			groundFloor	: true,
+			doors	: "regular",
+			fill	: "0.4, 0.5, 3, 0.8, 1, 0.8, 1"
+		},
+		office : {
+			minSize	: 2,
+			maxSize	: 6,
+			entrance: false,
+			basement: false,
+			fill	: "0.35, 1, 1, 0.5, 1, 1, 1"
+		},
+	}
+}

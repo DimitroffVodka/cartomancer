@@ -1,0 +1,27 @@
+{
+  "id": "cartomancer",
+  "title": "Cartomancer — Map Generators",
+  "description": "System-agnostic Watabou map generators (Realm, City, Village, Cave/Glade, Dungeon, Dwelling) with one-click scene import — walls, doors, multi-level floors, and stair regions. No game system required. Generators created by Watabou (https://watabou.itch.io). Please support him on Patreon (https://www.patreon.com/cw/watawatabou).",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "14"
+  },
+  "authors": [
+    { "name": "DimitroffVodka" }
+  ],
+  "relationships": {},
+  "esmodules": [
+    "scripts/cartomancer.mjs"
+  ],
+  "styles": [
+    { "src": "styles/maphub-launcher.css" }
+  ],
+  "languages": [
+    { "lang": "en", "name": "English", "path": "i18n/en.json" }
+  ],
+  "packs": [],
+  "url": "",
+  "manifest": "",
+  "download": ""
+}

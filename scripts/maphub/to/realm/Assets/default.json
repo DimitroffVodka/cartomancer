@@ -1,0 +1,87 @@
+{
+  "colorLightWood": [
+    "#C8CCB7",
+    "#ADB297"
+  ],
+  "fontTown": {
+    "italic": false,
+    "bold": false,
+    "face": null,
+    "size": 32,
+    "embedded": "def_font"
+  },
+  "colorClouds": "#F9F8F2",
+  "outlineColor": "#EBE8DF",
+  "floatAlpha": "0.7",
+  "colorBanners": "#F2EFE6",
+  "colorFlags": "#4D3F36",
+  "ruggedMountains": "true",
+  "ultraThin": "0.4",
+  "colorDanger": "#F2EFE6",
+  "colorWalls": "#EBE8DF",
+  "colorDarkWood": [
+    "#B9C1B2",
+    "#9BA591"
+  ],
+  "colorForeground": "#3F332C",
+  "normal": "1.4",
+  "dangerScale": "0.6",
+  "treesRegularity": "0.5",
+  "bandsNumber": "5",
+  "fontTitle": {
+    "italic": false,
+    "size": 48,
+    "face": null,
+    "bold": false,
+    "embedded": "def_font"
+  },
+  "enumShading": "Hatching",
+  "alphaLandShadow": "0.2",
+  "colorRivers": "#665C57",
+  "river": "3.0",
+  "colorRoutes": "#998B83",
+  "fontSticker": {
+    "italic": false,
+    "size": 20,
+    "face": null,
+    "bold": false,
+    "embedded": "def_font"
+  },
+  "colorMatte": "#F2EFE6",
+  "colorLandShadow": "#665C57",
+  "colorCompass": "#CCCAC1",
+  "colorMountain": "#E0DDD5",
+  "colorBackground": [
+    "#EBE8DF",
+    "#F2F0E6",
+    "#E5E2DA"
+  ],
+  "widthLandShadow": "0.333",
+  "colorShallow": "#EBE8DF",
+  "shallowEdge": "1.0",
+  "clutterScale": "0.7",
+  "fontDanger": {
+    "italic": false,
+    "bold": false,
+    "face": null,
+    "size": 24,
+    "embedded": "def_font"
+  },
+  "treesDensity": "0.2",
+  "floatStroke": "0.9",
+  "colorWater": "#E5E2DA",
+  "shallowSize": "0.8",
+  "textColor": "#4D3F36",
+  "townScale": "0.8",
+  "thin": "0.8",
+  "fontArea": {
+    "italic": false,
+    "bold": false,
+    "face": null,
+    "size": 28,
+    "embedded": "def_font"
+  },
+  "colorContours": "#998B83",
+  "colorRoofs": "#E59189",
+  "thick": "3.0"
+}

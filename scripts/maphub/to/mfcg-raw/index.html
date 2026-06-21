@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Medieval Fantasy City Generator</title>
+	<meta id="viewport" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<link rel="shortcut icon" type="image/png" href="favicon.png">
+
+	<script>
+		(function () {
+			// The generator normally runs at a real https:// URL. Inside Foundry we
+			// sometimes wrap the HTML in a blob: URL to get the right MIME type; URL
+			// state updates can throw there, which leaves OpenFL stuck on its loading
+			// screen. Keep history updates harmless inside the iframe.
+			const _replaceState = window.history.replaceState.bind(window.history);
+			window.history.replaceState = function (...args) {
+				try { return _replaceState(...args); }
+				catch (_err) { return undefined; }
+			};
+			const _pushState = window.history.pushState.bind(window.history);
+			window.history.pushState = function (...args) {
+				try { return _pushState(...args); }
+				catch (_err) { return undefined; }
+			};
+
+			// Force preserveDrawingBuffer so Foundry can capture the generated PNG.
+			const _getContext = HTMLCanvasElement.prototype.getContext;
+			HTMLCanvasElement.prototype.getContext = function (type, options) {
+				if (type === "webgl" || type === "webgl2") {
+					options = options || {};
+					options.preserveDrawingBuffer = true;
+				}
+				return _getContext.call(this, type, options);
+			};
+		})();
+	</script>
+	<script type="text/javascript" src="../../js/mfcg-raw/mfcg.js"></script>
+	<script>
+		window.addEventListener("touchmove", function (event) { event.preventDefault(); }, { capture: false, passive: false });
+		if (typeof window.devicePixelRatio !== "undefined" && window.devicePixelRatio > 2) {
+			const meta = document.getElementById("viewport");
+			meta.setAttribute("content", "width=device-width, initial-scale=" + (2 / window.devicePixelRatio) + ", user-scalable=no");
+		}
+
+		function installFoundrySaveAs() {
+			const _saveAs = window.saveAs;
+			if (!_saveAs || _saveAs.__sdxFoundrySaveAs) return;
+			const foundrySaveAs = function (blob, filename) {
+				if (filename) {
+					if (filename.endsWith(".json") || filename.endsWith(".pb")) {
+						window.parent.postMessage({ type: "maphub_save_json", blob, filename }, "*");
+						return;
+					}
+					if (filename.endsWith(".png")) {
+						window.parent.postMessage({ type: "maphub_save_image", blob, filename, format: "png" }, "*");
+						return;
+					}
+					if (filename.endsWith(".svg")) {
+						window.parent.postMessage({ type: "maphub_save_image", blob, filename, format: "svg" }, "*");
+						return;
+					}
+				}
+				return _saveAs.apply(this, arguments);
+			};
+			foundrySaveAs.__sdxFoundrySaveAs = true;
+			window.saveAs = foundrySaveAs;
+		}
+	</script>
+
+	<style>
+		html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+		#openfl-content { background: #000000; width: 100%; height: 100%; }
+		@font-face { font-family: 'IM FELL Great Primer Roman'; src: url('../../fonts/IMFellGreatPrimer-Regular.woff') format('woff'); font-weight: normal; font-style: normal; }
+		@font-face { font-family: 'Share Tech Regular'; src: url('../../fonts/ShareTech-Regular.woff') format('woff'); font-weight: normal; font-style: normal; }
+		@font-face { font-family: 'Share Tech Mono'; src: url('../../fonts/ShareTechMono-Regular.woff') format('woff'); font-weight: normal; font-style: normal; }
+	</style>
+</head>
+<body>
+	<noscript>This webpage makes extensive use of JavaScript. Please enable JavaScript in your web browser to view this page.</noscript>
+	<div id="openfl-content"></div>
+	<script type="text/javascript">
+		installFoundrySaveAs();
+		globalThis.maphubMfcgAppInstance = lime.embed("mfcg", "openfl-content", 0, 0, { parameters: {} });
+		setTimeout(installFoundrySaveAs, 500);
+		setTimeout(installFoundrySaveAs, 1500);
+	</script>
+</body>
+</html>
