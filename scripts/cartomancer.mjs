@@ -28,6 +28,11 @@ Hooks.once("init", () => {
 		hint: "Run the bundled Watabou generators from inside Foundry — required for scene/wall/level import (the hosted pages can't be captured cross-origin). Turn off to load watabou.github.io directly (view-only).",
 		scope: "world", config: true, type: Boolean, default: true,
 	});
+	game.settings.register(MODULE_ID, "openGeneratorsDetached", {
+		name: "Open generators in a detached window",
+		hint: "Pop each map generator into its own window when opened. Avoids Foundry's core 'Detach Window' control later reloading (and regenerating) a map you've already worked on.",
+		scope: "client", config: true, type: Boolean, default: false,
+	});
 	// DungeonDraft decor packs (no packs are bundled — users import their own).
 	game.settings.register(MODULE_ID, "decorDungeondraftPacks", {
 		scope: "world", config: false, type: Array, default: [],
@@ -45,11 +50,24 @@ Hooks.once("init", () => {
 	});
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
 	try { registerMaphubHooks(); } catch (e) { console.error(`${MODULE_ID} | registerMaphubHooks failed`, e); }
-	const mod = game.modules.get(MODULE_ID);
-	if (mod) mod.api = { openLauncher, openDDPackSettings, openDecorBrowser };
-	console.log(`${MODULE_ID} | ready — api: openLauncher(), openDDPackSettings(), openDecorBrowser()`);
+	// Realm import: one delegated listener powers every "Generate this map" button.
+	try {
+		const { RealmImporter } = await import("./RealmImporter.mjs");
+		RealmImporter.registerHooks();
+		const mod = game.modules.get(MODULE_ID);
+		if (mod) mod.api = {
+			openLauncher, openDDPackSettings, openDecorBrowser,
+			importRealm: (data, opts) => RealmImporter.importRealm(data, opts),
+			generateLocationFromJournal: (je) => RealmImporter.generateLocationFromJournal(je),
+		};
+	} catch (e) {
+		console.error(`${MODULE_ID} | RealmImporter wiring failed`, e);
+		const mod = game.modules.get(MODULE_ID);
+		if (mod) mod.api = { openLauncher, openDDPackSettings, openDecorBrowser };
+	}
+	console.log(`${MODULE_ID} | ready — api: openLauncher(), openDDPackSettings(), openDecorBrowser(), importRealm()`);
 });
 
 // Launch surface: a GM-only momentary BUTTON tool added to the existing Tokens

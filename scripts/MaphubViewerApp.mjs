@@ -24,13 +24,17 @@ const { ApplicationV2 } = foundry.applications.api;
 export class MaphubViewerApp extends ApplicationV2 {
 
 	/** @param {{ type: string, queryString: string, externalBase: string }} options */
-	constructor({ type, queryString = "", externalBase = "" } = {}) {
+	constructor({ type, queryString = "", externalBase = "", importContext = null } = {}) {
 		// Unique id per instance — the static DEFAULT_OPTIONS.id made every viewer a
 		// forced singleton (a second generator collided in the app registry + DOM id).
 		super({ id: `sdx-maphub-viewer-${type || "map"}-${foundry.utils.randomID(8)}` });
 		this._mapType = type;
 		this._queryString = queryString;
 		this._externalBase = externalBase;
+		// Realm-location import: when set, the imported scene lands in this folder,
+		// does NOT auto-activate, and relinks its source journal. See RealmImporter.
+		// { folderId, journalUuid, sceneName, activate }
+		this._importContext = importContext;
 		this._lastSavedDungeonJson = null;
 		this._lastSavedDungeonJsonAt = 0;
 		this._saveRotationWasOn = false;
@@ -60,6 +64,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 			importScene: MaphubViewerApp.#onImportScene,
 			setAsBackground: MaphubViewerApp.#onSetAsBackground,
 			addAsTile: MaphubViewerApp.#onAddAsTile,
+			// Override core's window Detach/Attach so they preserve the current map
+			// (they re-render → rebuild the iframe → a seedless generator re-rolls).
+			detach: MaphubViewerApp.#onDetachPreserve,
+			attach: MaphubViewerApp.#onAttachPreserve,
 		},
 	};
 
@@ -187,6 +195,27 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 		container.replaceChildren(iframe);
 		this._iframe = iframe;
+
+		this._maybeAutoDetach();
+	}
+
+	/**
+	 * If the user prefers it (setting), pop the generator into a detached window on
+	 * first open — early, before it finishes generating, so it loads ONCE in the
+	 * detached window (no flash) and the user never has to use core's Detach control
+	 * mid-work (which reloads and can regenerate the map). The flag stops the detach
+	 * re-render from re-detaching.
+	 */
+	_maybeAutoDetach() {
+		if (this._autoDetached) return;
+		let pref = false;
+		try { pref = !!game.settings.get(MODULE_ID, "openGeneratorsDetached"); } catch { return; }
+		if (!pref) return;
+		this._autoDetached = true;
+		setTimeout(() => {
+			try { this.detachWindow?.(); }
+			catch (e) { console.warn(`${MODULE_ID} | auto-detach failed`, e); }
+		}, 50);
 	}
 
 	// ── Header controls ───────────────────────────────────────────────────────
@@ -312,6 +341,53 @@ export class MaphubViewerApp extends ApplicationV2 {
 		ui.notifications.info("To save the map state, Right-Click the map, go to Export as -> JSON. The state will silently save to the server instead of downloading.", { permanent: true });
 	}
 
+	/**
+	 * Detach/Attach are core controls that re-render the app, rebuilding the iframe.
+	 * A seedless generator would re-roll to a fresh random map and lose the user's
+	 * work, so capture the current map's seed into this._queryString first.
+	 */
+	static async #onDetachPreserve() {
+		if (await this._reseedBeforeReframe()) await this.detachWindow();
+	}
+
+	static async #onAttachPreserve() {
+		if (await this._reseedBeforeReframe()) await this.attachWindow();
+	}
+
+	/**
+	 * Sync this._queryString to the CURRENT map so the next iframe rebuild reproduces
+	 * it. Returns true to proceed (reproducible, or the user accepted regeneration).
+	 */
+	async _reseedBeforeReframe() {
+		try {
+			if (this._mapType === "realm") {
+				const origin = this._extractRealmData()?.origin;
+				if (origin) {
+					try {
+						const u = new URL(origin);
+						this._externalBase = `${u.origin}${u.pathname}`;
+						this._queryString = u.search.replace(/^\?/, "");
+						return true;
+					} catch { /* fall through to the generic checks */ }
+				}
+			}
+			// Already seed-bound (e.g. opened from a realm link) → a reload reproduces it.
+			if (this._queryString && /(^|&)seed=/.test(this._queryString)) return true;
+			// Nothing to restore from — warn before the map is regenerated.
+			const { DialogV2 } = foundry.applications.api;
+			return await DialogV2.confirm({
+				window: { title: "Move generator window?" },
+				content: `<p>Moving this window reloads the generator, which will <strong>regenerate the map</strong> — there's no seed to restore the current one.</p>`
+					+ `<p>If you want to keep this map, <em>Import Scene</em> first. Move anyway?</p>`,
+				rejectClose: false,
+				modal: true,
+			});
+		} catch (e) {
+			console.warn(`${MODULE_ID} | reseed-before-reframe failed`, e);
+			return true;
+		}
+	}
+
 	_getMapIdFromQuery() {
 		try {
 			const params = new URLSearchParams(this._queryString);
@@ -407,6 +483,120 @@ export class MaphubViewerApp extends ApplicationV2 {
 	async _openLinkedGenerator({ type, queryString, externalBase }) {
 		const viewer = new MaphubViewerApp({ type, queryString, externalBase });
 		await viewer.render(true);
+	}
+
+	/**
+	 * Read the Perilous Shores realm export from the live iframe, the same object
+	 * the generator's "Export as → JSON" produces:
+	 *   new Serializer(view.region).region2data()  ->  {name, origin, bp, hexes, ...}
+	 * Returns null if the generator isn't a loaded realm. (The realm is a heavy
+	 * canvas app; this only works once it has finished loading — i.e. at import time.)
+	 */
+	_extractRealmData() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			if (!cw) return null;
+			// Perilous.js is patched (like Cave.js) to expose its Haxe class registry as
+			// window.__maphubClasses. From it we get the Serializer AND the live region:
+			// com.watabou.perilous.model.Region keeps the current region as a static
+			// singleton (`ca.inst = this`). region2data() needs only that region object.
+			// A fully-built realm region has bp + dcel + indices (region2data() dereferences
+			// region.dcel.faces and region.indices.h). Feature-detect rather than trust a
+			// name, and require a complete region so we never serialize a half-built one.
+			const isRegion = (r) => !!(r && typeof r === "object" && r.bp && r.dcel && r.indices && ("name" in r));
+			const classes = cw.__maphubClasses;
+			let Serializer = null, region = null;
+			if (classes) {
+				Serializer = classes["com.watabou.perilous.model.Serializer"] || null;
+				// Region keeps the live region as a static singleton (ca.inst); MapScene
+				// holds the same object on .region (Ya.inst.region) — try both.
+				if (isRegion(classes["com.watabou.perilous.model.Region"]?.inst)) region = classes["com.watabou.perilous.model.Region"].inst;
+				if (!region && isRegion(classes["com.watabou.perilous.MapScene"]?.inst?.region)) region = classes["com.watabou.perilous.MapScene"].inst.region;
+				// Fallback: any registered class whose .inst (or .inst.region) is a region.
+				if (!region) {
+					for (const cls of Object.values(classes)) {
+						try { if (isRegion(cls?.inst)) { region = cls.inst; break; } if (isRegion(cls?.inst?.region)) { region = cls.inst.region; break; } } catch {}
+					}
+				}
+			}
+			if (Serializer && region) {
+				const data = new Serializer(region).region2data();
+				if (data && data.hexes) return data;
+			}
+			// Last-ditch: a view-style global that carries .region (other generators).
+			const view = cw.maphubAppInstance || cw.maphubRealmAppInstance;
+			const viewRegion = view?.region;
+			if (Serializer && viewRegion?.bp) {
+				const data = new Serializer(viewRegion).region2data();
+				if (data && data.hexes) return data;
+			}
+			return null;
+		} catch (e) {
+			console.warn(`${MODULE_ID} | Failed to extract realm data`, e);
+			return null;
+		}
+	}
+
+	/** Ask whether to also build location journals for a realm. Returns boolean. */
+	async _promptRealmLocations(realmData, locs) {
+		const { DialogV2 } = foundry.applications.api;
+		const LABELS = { mfcg: "City", village: "Village", dungeon: "Dungeon", cave: "Cave", dwellings: "Dwelling" };
+		const counts = {};
+		for (const l of locs) counts[l.type] = (counts[l.type] || 0) + 1;
+		const summary = Object.entries(counts).map(([t, n]) => `${n} ${LABELS[t] || t}`).join(", ");
+		const name = String(realmData?.name || "Realm");
+		try {
+			const choice = await DialogV2.wait({
+				window: { title: `Import realm “${name}”` },
+				content: `<p>This realm links <strong>${locs.length}</strong> location(s): ${summary}.</p>`
+					+ `<p>Also create a “${name}” folder of cross-linked journals for them? Each location's map is generated on demand — one click in its journal — so nothing heavy happens now.</p>`,
+				buttons: [
+					{ action: "locations", label: "Map + location journals", default: true },
+					{ action: "map", label: "Just the map" },
+				],
+				rejectClose: false,
+			});
+			return choice === "locations";
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Map each realm location to a pixel position on the captured scene image using
+	 * the generator's OWN rendered geometry (so warp/tilt/vantage are respected):
+	 *   cell.center (world) → view.localToGlobal → stage(CSS)px → ×dpr → backing px.
+	 * MUST run at capture time (after the window maximised) — the view transform
+	 * depends on the current canvas size. Returns { [name]: {x, y} } in scene pixels.
+	 */
+	_extractRealmLocationPositions(sceneW, sceneH) {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const C = cw?.__maphubClasses;
+			const region = C?.["com.watabou.perilous.model.Region"]?.inst;
+			const scene = C?.["com.watabou.perilous.MapScene"]?.inst;
+			const view = scene?.view;
+			const Point = C?.["openfl.geom.Point"];
+			if (!region?.getFeatures || !view?.localToGlobal || !Point) return {};
+			const gc = this._iframe?.contentDocument?.querySelector("canvas");
+			const stageW = gc?.clientWidth || sceneW || 1;
+			const stageH = gc?.clientHeight || sceneH || 1;
+			const fx = (sceneW || gc?.width || stageW) / stageW;
+			const fy = (sceneH || gc?.height || stageH) / stageH;
+			const out = {};
+			for (const f of region.getFeatures()) {
+				const c = f?.cell?.center;
+				if (!c || !f.name) continue;
+				try {
+					const g = view.localToGlobal(new Point(c.x, c.y));
+					out[String(f.name).trim()] = { x: Math.round(g.x * fx), y: Math.round(g.y * fy) };
+				} catch { /* skip a bad feature */ }
+			}
+			return out;
+		} catch (e) {
+			console.warn(`${MODULE_ID} | realm location positions failed`, e);
+			return {};
+		}
 	}
 
 	async _onMessage(event) {
@@ -622,6 +812,20 @@ export class MaphubViewerApp extends ApplicationV2 {
 		const isDwellings = this._mapType === "dwellings";
 		const isCave = this._mapType === "cave";
 		const isDungeon = this._mapType === "dungeon";
+		const isRealm = this._mapType === "realm";
+
+		// Realm: offer to also create cross-linked journals for the linked
+		// cities/villages/dungeons (each map generates on demand). Extract the realm
+		// model now — the iframe is loaded and capture/maximize would disturb it.
+		let realmData = null, alsoLocations = false;
+		if (isRealm) {
+			realmData = this._extractRealmData();
+			if (realmData) {
+				const { parseRealmLocations } = await import("./RealmImporter.mjs");
+				const locs = parseRealmLocations(realmData);
+				if (locs.length) alsoLocations = await this._promptRealmLocations(realmData, locs);
+			}
+		}
 		// For One Page Dungeon, automatically export the current JSON so the
 		// wall data always matches the map image. Pressing 'J' triggers
 		// Bb.exportJSON inside the generator which flows through our saveAs
@@ -636,7 +840,9 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// Dwelling: build a v14 multi-level scene (one elevation Level per floor,
 		// per-floor walls, changeLevel stair regions). Falls through to the generic
 		// image import only if the live generator controller isn't reachable.
-		if (isDwellings) {
+		// A realm-location import (importContext) always uses the generic image path
+		// so its journal-relink callback fires; realms never link the dwelling generator.
+		if (isDwellings && !this._importContext) {
 			const handled = await this._importDwellingScene();
 			if (handled) return;
 		}
@@ -653,7 +859,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 		}
 
 		try {
-			const sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
+			let sceneName;
+			if (this._importContext?.sceneName) sceneName = this._importContext.sceneName;
+			else if (isRealm && realmData?.name) sceneName = realmData.name;
+			else sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
 			let grid = this._getImportGridSize();
 
 			let walls = [];
@@ -743,6 +952,30 @@ export class MaphubViewerApp extends ApplicationV2 {
 			}
 			if (notes.length) {
 				await scene.createEmbeddedDocuments("Note", notes);
+			}
+
+			// Realm-location import: relink the source journal to this new scene, and for
+			// dungeons fold the room key (story + numbered notes) from the captured JSON
+			// into the journal so it doubles as a readable dungeon key.
+			if (this._importContext?.journalUuid) {
+				try {
+					const { RealmImporter } = await import("./RealmImporter.mjs");
+					const detailHtml = isDungeon ? RealmImporter.buildDungeonDetailHtml(this._lastSavedDungeonJson) : "";
+					await RealmImporter.onLocationSceneCreated(this._importContext.journalUuid, scene, detailHtml);
+				} catch (e) { console.error(`${MODULE_ID} | location journal relink failed`, e); }
+			}
+			// Realm overview import: also build the location folder + cross-linked journals,
+			// and Note pins on the realm scene (positions read from the live render NOW,
+			// while the canvas is still at the captured/maximised size).
+			if (isRealm && alsoLocations && realmData) {
+				try {
+					const positions = this._extractRealmLocationPositions(scene.width, scene.height);
+					const { RealmImporter } = await import("./RealmImporter.mjs");
+					await RealmImporter.importRealm(realmData, { realmScene: scene, positions });
+				} catch (e) {
+					console.error(`${MODULE_ID} | realm locations import failed`, e);
+					ui.notifications.error(`Realm map imported, but linked-location journals failed: ${e.message}`);
+				}
 			}
 
 			const wallNote = walls.length ? ` with ${walls.length} walls/doors` : "";
@@ -1712,6 +1945,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			fogExploration: true,
 			tokenVision: true,
 		};
+		if (this._importContext?.folderId) sceneData.folder = this._importContext.folderId;
 
 		const foundryMajor = Number(game.version?.split?.(".")?.[0] ?? 0);
 		if (foundryMajor >= 14) {
@@ -1721,7 +1955,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 		}
 
 		const scene = await Scene.create(sceneData);
-		await scene.activate();
+		// Realm-location imports stay un-activated (the GM may generate several).
+		if (this._importContext?.activate !== false) await scene.activate();
 		return scene;
 	}
 
@@ -2026,8 +2261,17 @@ export class MaphubViewerApp extends ApplicationV2 {
 					return ext;
 				}
 
+				// A blob: URL carries no query string, so the generator's seed read
+				// `new URLSearchParams(location.search)` sees nothing and draws a RANDOM
+				// map instead of the requested seed/name. Inject a shim (before any
+				// generator script) that feeds our query string to URLSearchParams when
+				// it's built from the empty blob location.search. Every bundled generator
+				// (mfcg/village/dungeon/cave/realm) reads its seed this exact way.
+				const qsInject = this._queryString
+					? `<script>(function(){var q=${JSON.stringify(this._queryString).replace(/</g, "\\u003c")};var N=window.URLSearchParams;window.URLSearchParams=function(i){if((i==null||i===""||i===window.location.search)&&q)i=q;return new N(i);};window.URLSearchParams.prototype=N.prototype;})();</script>`
+					: "";
 				html = html
-					.replace(/<head([^>]*)>/i, `<head$1><base href="${localBaseDir}">`)
+					.replace(/<head([^>]*)>/i, `<head$1><base href="${localBaseDir}">${qsInject}`)
 					.replace(/(\.\.\/\.\.\/js\/[^"]+\.js)(")/g, `$1?cb=${Date.now()}$2`);
 				this._blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html" }));
 				console.log(`${MODULE_ID} | MaphubViewerApp: using local Blob URL for ${localUrl}`);
