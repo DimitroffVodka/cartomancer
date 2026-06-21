@@ -13,7 +13,9 @@ const STYLES = `
 .sdx-ddp-folder label{color:#c8a96e;white-space:nowrap}
 .sdx-ddp-folder input{flex:1;background:#222;border:1px solid #444;color:#e0d0a8;padding:5px 8px;border-radius:4px}
 .sdx-ddp-body{display:flex;flex:1;min-height:0;overflow:hidden}
-.sdx-ddp-tree{width:240px;min-width:190px;overflow:auto;background:#141414;border-right:1px solid #292929;padding:6px 0}
+.sdx-ddp-tree{flex:0 0 auto;width:240px;min-width:140px;max-width:72%;overflow:auto;background:#141414;padding:6px 0}
+.sdx-ddp-divider{flex:0 0 6px;cursor:col-resize;background:#2a2a2a;border-left:1px solid #1c1c1c}
+.sdx-ddp-divider:hover{background:#6a9a40}
 .sdx-ddp-row{display:flex;align-items:center;gap:5px;padding:4px 8px;color:#b8a878;cursor:pointer;white-space:nowrap;overflow:hidden}
 .sdx-ddp-row.active,.sdx-ddp-row:hover{background:#261e0e;color:#e8d5a3}
 .sdx-ddp-row input{width:14px;height:14px;accent-color:#6a9a40}
@@ -47,6 +49,16 @@ function escapeHtml(value) {
 
 function formatLabel(filename) {
     return String(filename || "").replace(/\.(png|webp)$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const TREE_WIDTH_KEY = "cartomancer-decor-tree-width";
+
+// Drop a leading "[tag] " (e.g. the author's "[WFW] ") from a folder label for
+// display — the full path stays in the row's title tooltip. Keeps the original if
+// stripping would empty it.
+function shortLabel(s) {
+    const t = String(s ?? "").replace(/^\[[^\]]+\]\s+/, "").trim();
+    return t || String(s ?? "");
 }
 
 export class DDPackPreviewApp extends ApplicationV2 {
@@ -114,6 +126,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
             </div>
             <div class="sdx-ddp-body">
                 <div class="sdx-ddp-tree"></div>
+                <div class="sdx-ddp-divider" title="Drag to resize the folder panel"></div>
                 <div class="sdx-ddp-right">
                     <div class="sdx-ddp-assets-head"><h3>-</h3><button type="button" data-action="all">All</button><button type="button" data-action="none">None</button><span class="asset-count"></span></div>
                     <div class="sdx-ddp-grid"></div>
@@ -134,11 +147,38 @@ export class DDPackPreviewApp extends ApplicationV2 {
     }
 
     _onRender() {
+        this.#wireTreeResizer();
         this.#renderTree();
         this.#renderAssets();
         this.element.querySelector("[data-action='extract-selected']")?.addEventListener("click", () => this.#extract(new Set(this.selected)));
         this.element.querySelector("[data-action='extract-all']")?.addEventListener("click", () => this.#extract(null));
         this.element.querySelector("[data-action='cancel']")?.addEventListener("click", () => this.close());
+    }
+
+    // Draggable divider to resize the folder tree; width persists in localStorage.
+    #wireTreeResizer() {
+        const body = this.element.querySelector(".sdx-ddp-body");
+        const tree = this.element.querySelector(".sdx-ddp-tree");
+        const divider = this.element.querySelector(".sdx-ddp-divider");
+        if (!body || !tree || !divider) return;
+        try { const saved = parseInt(localStorage.getItem(TREE_WIDTH_KEY), 10); if (saved > 0) tree.style.width = `${saved}px`; } catch (_) { }
+        divider.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            document.body.style.cursor = "col-resize";
+            const onMove = (ev) => {
+                const rect = body.getBoundingClientRect();
+                const w = Math.max(140, Math.min(rect.width - 220, ev.clientX - rect.left));
+                tree.style.width = `${w}px`;
+            };
+            const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                document.body.style.cursor = "";
+                try { localStorage.setItem(TREE_WIDTH_KEY, String(parseInt(tree.style.width, 10) || 240)); } catch (_) { }
+            };
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
     }
 
     #buildTree(categories) {
@@ -150,7 +190,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
             for (let i = 0; i < parts.length; i++) {
                 const key = parts.slice(0, i + 1).join("/");
                 if (!byKey.has(key)) {
-                    const node = { key, label: parts[i], children: [], files: [] };
+                    const node = { key, label: shortLabel(parts[i]), children: [], files: [] };
                     byKey.set(key, node);
                     if (parentKey) byKey.get(parentKey).children.push(node);
                     else roots.push(node);

@@ -19,7 +19,9 @@ const STYLES = `
 .cdx-decor-ctl input[type=number]{width:54px;background:rgba(20,22,28,0.9);border:1px solid rgba(255,255,255,0.1);color:#e0e6ed;padding:3px 5px;border-radius:4px}
 .cdx-decor-hint{flex-basis:100%;font-size:11px;color:#a0a8b5;margin-top:1px}
 .cdx-decor-body{display:flex;flex:1;min-height:0;overflow:hidden}
-.cdx-decor-tree{width:248px;min-width:200px;overflow:auto;background:rgba(15,17,21,0.6);border-right:1px solid rgba(255,255,255,0.08);padding:6px 0}
+.cdx-decor-tree{flex:0 0 auto;width:248px;min-width:140px;max-width:72%;overflow:auto;background:rgba(15,17,21,0.6);padding:6px 0}
+.cdx-decor-divider{flex:0 0 6px;cursor:col-resize;background:rgba(255,255,255,0.06);border-left:1px solid rgba(255,255,255,0.06)}
+.cdx-decor-divider:hover{background:rgba(201,170,88,0.4)}
 .cdx-decor-row{display:flex;align-items:center;gap:6px;padding:4px 8px;color:#c9aa58;cursor:pointer;white-space:nowrap;overflow:hidden}
 .cdx-decor-row.active,.cdx-decor-row:hover{background:rgba(201,170,88,0.14);color:#e6c875}
 .cdx-decor-row.disabled{opacity:.5;font-style:italic}
@@ -42,6 +44,16 @@ const STYLES = `
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+const TREE_WIDTH_KEY = "cartomancer-decor-tree-width";
+
+// Drop a leading "[tag] " (e.g. the author's "[WFW] ") from a folder label for
+// display — the full path stays in the row's title tooltip. Keeps the original if
+// stripping would empty it (a segment that is only "[Tag]").
+function shortLabel(s) {
+    const t = String(s ?? "").replace(/^\[[^\]]+\]\s+/, "").trim();
+    return t || String(s ?? "");
 }
 
 /**
@@ -137,6 +149,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             </div>
             <div class="cdx-decor-body">
                 <div class="cdx-decor-tree"></div>
+                <div class="cdx-decor-divider" title="Drag to resize the folder panel"></div>
                 <div class="cdx-decor-right">
                     <div class="cdx-decor-breadcrumb"></div>
                     <div class="cdx-decor-grid"></div>
@@ -152,6 +165,7 @@ export class DecorBrowserApp extends ApplicationV2 {
 
     _onRender() {
         const root = this.element;
+        this.#wireTreeResizer();
         const search = root.querySelector(".cdx-decor-search");
         search?.addEventListener("input", (e) => this.#onSearch(e.target.value));
         search?.addEventListener("keydown", (e) => {
@@ -185,6 +199,32 @@ export class DecorBrowserApp extends ApplicationV2 {
         clearTimeout(this._searchTimer);
         if (this.constructor._instance === this) this.constructor._instance = null;
         return super.close(options);
+    }
+
+    // Draggable divider to resize the folder tree; width persists in localStorage.
+    #wireTreeResizer() {
+        const body = this.element.querySelector(".cdx-decor-body");
+        const tree = this.element.querySelector(".cdx-decor-tree");
+        const divider = this.element.querySelector(".cdx-decor-divider");
+        if (!body || !tree || !divider) return;
+        try { const saved = parseInt(localStorage.getItem(TREE_WIDTH_KEY), 10); if (saved > 0) tree.style.width = `${saved}px`; } catch (_) { }
+        divider.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            document.body.style.cursor = "col-resize";
+            const onMove = (ev) => {
+                const rect = body.getBoundingClientRect();
+                const w = Math.max(140, Math.min(rect.width - 220, ev.clientX - rect.left));
+                tree.style.width = `${w}px`;
+            };
+            const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                document.body.style.cursor = "";
+                try { localStorage.setItem(TREE_WIDTH_KEY, String(parseInt(tree.style.width, 10) || 248)); } catch (_) { }
+            };
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
     }
 
     /* ----------------------------------- data ----------------------------------- */
@@ -225,7 +265,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             for (let i = 0; i < chain.length; i++) {
                 const key = chain.slice(0, i + 1).join("/");
                 if (!byKey.has(key)) {
-                    const node = { key, label: i === 0 ? (tile.packName || packId) : chain[i], children: [], tiles: [], packId: i === 0 ? packId : null };
+                    const node = { key, label: shortLabel(i === 0 ? (tile.packName || packId) : chain[i]), children: [], tiles: [], packId: i === 0 ? packId : null };
                     byKey.set(key, node);
                     if (parentKey) byKey.get(parentKey).children.push(node);
                     else roots.push(node);
@@ -239,7 +279,7 @@ export class DecorBrowserApp extends ApplicationV2 {
         const present = new Set(roots.map(r => r.packId));
         for (const pack of getDDPacks()) {
             if (pack.enabled === false && !present.has(pack.packId)) {
-                const node = { key: pack.packId, label: pack.name || pack.packId, children: [], tiles: [], packId: pack.packId, disabled: true };
+                const node = { key: pack.packId, label: shortLabel(pack.name || pack.packId), children: [], tiles: [], packId: pack.packId, disabled: true };
                 byKey.set(node.key, node);
                 roots.push(node);
             }
