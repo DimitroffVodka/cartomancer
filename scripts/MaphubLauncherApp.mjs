@@ -27,8 +27,9 @@ export class MaphubLauncherApp extends HandlebarsApplicationMixin(ApplicationV2)
         super(options);
     }
 
-    async _preFirstRender(context, options) {
-        await super._preFirstRender?.(context, options);
+    // v14 ignores _preFirstRender's return value — _canRender is the real render-abort
+    // hook (return false to veto). openLauncher() also GM-gates the API path.
+    _canRender(options) {
         if (!game.user.isGM) {
             ui.notifications.warn("Only a GM can open map generators.");
             return false;

@@ -50,6 +50,15 @@ export class DDPackSettingsApp extends ApplicationV2 {
         this.status = "";
     }
 
+    // Real render veto for non-GMs (v14 ignores _preFirstRender's return). The API
+    // opener also gates, so this is defense-in-depth for direct instantiation.
+    _canRender(options) {
+        if (!game.user.isGM) {
+            ui.notifications.warn("Only a GM can manage decor packs.");
+            return false;
+        }
+    }
+
     async _renderHTML() {
         const existingStyles = document.getElementById("sdx-ddpack-settings-styles");
         if (existingStyles) {
@@ -121,10 +130,11 @@ export class DDPackSettingsApp extends ApplicationV2 {
             });
             row.querySelector(".sdx-ddpack-remove")?.addEventListener("click", async () => {
                 const pack = getDDPacks().find(p => p.packId === packId);
-                const ok = await Dialog.confirm({
-                    title: "Remove Dungeondraft Pack",
-                    content: `<p>Remove <strong>${escapeHtml(pack?.folderLabel || pack?.name || packId)}</strong> from the Decor tray?</p><p>Extracted files stay in <code>Data/${DD_DECOR_BASE}/${escapeHtml(packId)}/</code>.</p>`,
-                    defaultYes: false
+                const ok = await foundry.applications.api.DialogV2.confirm({
+                    window: { title: "Remove Dungeondraft Pack" },
+                    content: `<p>Remove <strong>${escapeHtml(pack?.folderLabel || pack?.name || packId)}</strong> from the decor browser?</p><p>Extracted files stay in <code>Data/${DD_DECOR_BASE}/${escapeHtml(packId)}/</code>.</p>`,
+                    modal: true,
+                    rejectClose: false
                 });
                 if (!ok) return;
                 await removeDDPack(packId);

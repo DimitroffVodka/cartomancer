@@ -1,14 +1,16 @@
 import { MODULE_ID } from "./constants.mjs";
 import { registerMaphubHooks } from "./MaphubSD.mjs";
 
-/** Open the map-generator launcher. */
+/** Open the map-generator launcher. GM only. */
 export async function openLauncher() {
+	if (!game.user?.isGM) { ui.notifications.warn("Only a GM can open map generators."); return; }
 	const { MaphubLauncherApp } = await import("./MaphubLauncherApp.mjs");
 	new MaphubLauncherApp().render(true);
 }
 
-/** Open the DungeonDraft pack manager (import / enable / remove decor packs). */
+/** Open the DungeonDraft pack manager (import / enable / remove decor packs). GM only. */
 export async function openDDPackSettings() {
+	if (!game.user?.isGM) { ui.notifications.warn("Only a GM can manage decor packs."); return; }
 	const { DDPackSettingsApp } = await import("./DDPackSettingsAppSD.mjs");
 	new DDPackSettingsApp().render(true);
 }
