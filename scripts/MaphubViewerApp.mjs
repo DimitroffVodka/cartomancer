@@ -1249,26 +1249,44 @@ export class MaphubViewerApp extends ApplicationV2 {
 				// cell + the level pair it bridges.
 				const floorToUnit = new Map(units.map(u => [u.floor, u]));
 				const regionByKey = new Map();
-				const addStairRegion = (cell, uA, uB) => {
+				// Group every staircase by its CELL: one region per cell, spanning all the
+				// levels reachable there. A single staircase serving 3+ levels becomes ONE
+				// up/down chooser instead of stacked changeLevel regions (which fire duelling
+				// level-change prompts on the same tile). REGION_VISIBILITY.LAYER throughout.
+				const stairCells = new Map();
+				const noteStair = (cell, uA, uB) => {
 					if (!cell || typeof cell.i !== "number" || !uA || !uB || uA === uB) return;
-					const lo = uA.bottom <= uB.bottom ? uA : uB, hi = uA.bottom <= uB.bottom ? uB : uA;
-					const key = `${cell.i},${cell.j}|${lo.bottom}|${hi.bottom}`;
-					if (regionByKey.has(key)) return;
-					const cc = nodeToScene(cell.j + 0.5, cell.i + 0.5);
-					regionByKey.set(key, {
-						name: `Stairs: ${lo.name} ↔ ${hi.name}`,
-						color: "#28c9cc",
-						shapes: [{ type: "rectangle", x: cc.x - gridPx / 2, y: cc.y - gridPx / 2, width: gridPx, height: gridPx, hole: false }],
-						elevation: { bottom: lo.bottom, top: hi.top, topInclusive: false },
-						levels: [lo.level.id, hi.level.id],
-						visibility: 0, locked: false,   // REGION_VISIBILITY.LAYER: shown only on the Regions layer, not during play
-						behaviors: [{ name: "Change Level", type: "changeLevel", system: { movementActions: [] } }],
-					});
+					const k = `${cell.i},${cell.j}`;
+					let e = stairCells.get(k);
+					if (!e) { e = { cell, units: new Set() }; stairCells.set(k, e); }
+					e.units.add(uA); e.units.add(uB);
 				};
-				// Regular stairs: each stair's cell bridges its floor and s.to.plan's floor.
 				for (const u of units) for (const s of (u.floor.stairs || [])) {
 					const other = s?.to?.plan ? floorToUnit.get(s.to.plan) : null;
-					if (other) addStairRegion(s.cell, u, other);
+					if (other) noteStair(s.cell, u, other);
+				}
+				for (const [key, e] of stairCells) {
+					const us = [...e.units].sort((a, b) => a.bottom - b.bottom);
+					if (us.length < 2) continue;
+					const cc = nodeToScene(e.cell.j + 0.5, e.cell.i + 0.5);
+					const shapes = [{ type: "rectangle", x: cc.x - gridPx / 2, y: cc.y - gridPx / 2, width: gridPx, height: gridPx, hole: false }];
+					const elevation = { bottom: us[0].bottom, top: us[us.length - 1].top, topInclusive: false };
+					if (us.length === 2) {
+						const [lo, hi] = us;
+						regionByKey.set(key, {
+							name: `Stairs: ${lo.name} ↔ ${hi.name}`, color: "#28c9cc", shapes, elevation,
+							levels: [lo.level.id, hi.level.id], visibility: 0, locked: false,
+							behaviors: [{ name: "Change Level", type: "changeLevel", system: { movementActions: [] } }],
+						});
+					} else {
+						const conn = us.map(u => ({ name: u.name, bottom: u.bottom, id: u.level.id }));
+						regionByKey.set(key, {
+							name: `Stairs: ${us[0].name} ↔ ${us[us.length - 1].name}`, color: "#28c9cc", shapes, elevation,
+							levels: us.map(u => u.level.id), visibility: 0, locked: false,
+							flags: { [MODULE_ID]: { spiral: conn } },
+							behaviors: [{ name: "Up/Down", type: "executeScript", system: { events: ["tokenMoveIn"], source: this._spiralRegionScript() } }],
+						});
+					}
 				}
 				// Spiral tower: one shared shaft connecting every above-ground floor at a single
 				// cell. A MIDDLE floor can go both up AND down from it, which the default
@@ -1287,7 +1305,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 						let cell = sp;
 						try {
 							const C = [spObj.entrance.a, spObj.entrance.b].find(n1 => [spObj.exit.a, spObj.exit.b].some(n2 => n2 && n1 && n2.i === n1.i && n2.j === n1.j));
-							if (C) cell = { i: 2 * C.i - 1 - sp.i, j: 2 * C.j - 1 - sp.j };
+							if (C) { const cand = { i: 2 * C.i - 1 - sp.i, j: 2 * C.j - 1 - sp.j }; if (Math.abs(cand.i - sp.i) <= 1 && Math.abs(cand.j - sp.j) <= 1) cell = cand; }   // trust the reflected shaft cell only if adjacent to the landing (a far reflection lands across the building / in a hall)
 						} catch (_) { }
 						const cc = nodeToScene(cell.j + 0.5, cell.i + 0.5);
 						regionByKey.set(`spiral|${sp.i},${sp.j}`, {
