@@ -115,21 +115,24 @@ export async function scanDDPack(file) {
         const { category, filename } = objectPathParts(entry.path);
         const key = category || "__root__";
         if (!categoryMap.has(key)) categoryMap.set(key, []);
-        const bytes = readEntry(buffer, entry);
         const mime = /\.png$/i.test(filename) ? "image/png" : "image/webp";
-        const previewUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-        categoryMap.get(key).push({ path: entry.path, filename, category, previewUrl });
+        // Table-only scan: record where each texture lives in the buffer and decode the
+        // thumbnail lazily (the preview blobs only what scrolls into view). Decoding all
+        // 5000+ up front is what made the preview feel like a full import.
+        categoryMap.get(key).push({ path: entry.path, filename, category, offset: entry.offset, size: entry.size, mime });
     }
 
     const categories = [...categoryMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, files]) => ({ name, files }));
 
-    return { meta, categories, totalAssets: objectFiles.length };
+    // buffer is returned so the preview can lazily decode thumbnails and reuse it for
+    // extraction (no second 265 MB read). The caller must release it (preview close()).
+    return { meta, categories, totalAssets: objectFiles.length, buffer };
 }
 
-export async function extractDDPack(file, folderLabel, onProgress, selectedPaths = null) {
-    const buffer = await file.arrayBuffer();
+export async function extractDDPack(file, folderLabel, onProgress, selectedPaths = null, buffer = null) {
+    buffer = buffer || await file.arrayBuffer();   // reuse the scan's buffer when provided
     const files = parsePCK(buffer);
     const packJsonEntry = files.find(f => f.path.endsWith("pack.json") && !f.path.includes("/data/"));
     if (!packJsonEntry) throw new Error("pack.json not found in pack.");

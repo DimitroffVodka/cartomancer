@@ -38,6 +38,7 @@ const STYLES = `
 .sdx-ddp-progress{position:absolute;inset:0;background:rgba(0,0,0,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:10}
 .sdx-ddp-bar{width:65%;height:8px;background:#222;border-radius:4px;overflow:hidden}
 .sdx-ddp-fill{height:100%;background:#6a9a40}
+.sdx-ddp-capnote{grid-column:1/-1;color:#c8a96e;padding:8px 6px;font-size:12px}
 </style>`;
 
 function escapeHtml(value) {
@@ -62,7 +63,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
         this.scan = scan;
         this.file = file;
         this.onDone = onDone;
-        this.selected = new Set(scan.categories.flatMap(category => category.files.map(file => file.path)));
+        this.selected = new Set();          // default: nothing selected — pick 1 file, a category, or use Extract All
         this.tree = this.#buildTree(scan.categories);
         this.open = {};
         this.viewKey = this.tree[0]?.key ?? null;
@@ -70,13 +71,27 @@ export class DDPackPreviewApp extends ApplicationV2 {
         this.progress = 0;
         this.total = 0;
         this.status = "";
+        this._blobUrls = new Map();         // lazily-decoded thumbnail URLs (revoked on close)
+        this._io = null;
     }
 
     close(options) {
-        for (const category of this.scan.categories) {
-            for (const file of category.files) URL.revokeObjectURL(file.previewUrl);
-        }
+        this._io?.disconnect();
+        this._io = null;
+        for (const url of this._blobUrls.values()) URL.revokeObjectURL(url);
+        this._blobUrls.clear();
+        if (this.scan) this.scan.buffer = null;   // release the working buffer copy
         return super.close(options);
+    }
+
+    // Decode a thumbnail from the shared buffer on demand; cache + revoke on close.
+    #thumbUrl(file) {
+        let url = this._blobUrls.get(file.path);
+        if (!url) {
+            url = URL.createObjectURL(new Blob([new Uint8Array(this.scan.buffer, file.offset, file.size)], { type: file.mime }));
+            this._blobUrls.set(file.path, url);
+        }
+        return url;
     }
 
     async _renderHTML() {
@@ -204,28 +219,49 @@ export class DDPackPreviewApp extends ApplicationV2 {
         const count = this.element.querySelector(".sdx-ddp-assets-head .asset-count");
         const node = this.#nodeByKey(this.viewKey);
         if (!node) return;
-        const files = this.#nodeFiles(node);
+        this._io?.disconnect();
+        this._io = null;
+        const allFiles = this.#nodeFiles(node);
         head.textContent = node.key;
-        count.textContent = `${files.filter(file => this.selected.has(file.path)).length} / ${files.length}`;
+        count.textContent = `${allFiles.filter(file => this.selected.has(file.path)).length} / ${allFiles.length}`;
+        const CAP = 500;
+        const files = allFiles.slice(0, CAP);
+        const overflow = allFiles.length - files.length;
         grid.innerHTML = files.map(file => {
             const selected = this.selected.has(file.path);
             return `<button type="button" class="sdx-ddp-thumb${selected ? " selected" : ""}" data-path="${escapeHtml(file.path)}" title="${escapeHtml(file.filename)}">
-                <span class="sdx-ddp-check"></span><img src="${file.previewUrl}" loading="lazy" alt=""><span>${escapeHtml(formatLabel(file.filename))}</span>
+                <span class="sdx-ddp-check"></span><img data-path="${escapeHtml(file.path)}" loading="lazy" alt=""><span>${escapeHtml(formatLabel(file.filename))}</span>
             </button>`;
-        }).join("");
+        }).join("") + (overflow > 0 ? `<div class="sdx-ddp-capnote">Showing first ${CAP} of ${allFiles.length}. Tick this category in the tree to select all of it, or open a subfolder.</div>` : "");
+
+        // Lazily decode each thumbnail's blob from the buffer only as it scrolls into view.
+        const byPath = new Map(files.map(file => [file.path, file]));
+        this._io = new IntersectionObserver((entries, obs) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                const img = entry.target;
+                const file = byPath.get(img.dataset.path);
+                if (file && !img.src) img.src = this.#thumbUrl(file);
+                obs.unobserve(img);
+            }
+        }, { root: grid, rootMargin: "200px" });
+
         grid.querySelectorAll(".sdx-ddp-thumb").forEach(button => {
+            const img = button.querySelector("img");
+            if (img) this._io.observe(img);
             button.addEventListener("click", () => {
                 const path = button.dataset.path;
                 this.selected.has(path) ? this.selected.delete(path) : this.selected.add(path);
                 this.#refresh();
             });
         });
+        // "All"/"None" act on the node's FULL set (not just the capped view).
         this.element.querySelector("[data-action='all']")?.addEventListener("click", () => {
-            for (const file of files) this.selected.add(file.path);
+            for (const file of allFiles) this.selected.add(file.path);
             this.#refresh();
         });
         this.element.querySelector("[data-action='none']")?.addEventListener("click", () => {
-            for (const file of files) this.selected.delete(file.path);
+            for (const file of allFiles) this.selected.delete(file.path);
             this.#refresh();
         });
     }
@@ -249,7 +285,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
                 this.total = total;
                 this.status = `Extracting... ${done} / ${total}`;
                 if (done % 20 === 0 || done === total) this.render();
-            }, selectedPaths);
+            }, selectedPaths, this.scan.buffer);   // reuse the scan buffer — no second read
             await upsertDDPack(indexData);
             /* decor browser refreshes via the cartomancer.decorAssetsImported hook */
             Hooks.callAll("cartomancer.decorAssetsImported");
