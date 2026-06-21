@@ -1261,7 +1261,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 						shapes: [{ type: "rectangle", x: cc.x - gridPx / 2, y: cc.y - gridPx / 2, width: gridPx, height: gridPx, hole: false }],
 						elevation: { bottom: lo.bottom, top: hi.top, topInclusive: false },
 						levels: [lo.level.id, hi.level.id],
-						visibility: 1, locked: false,
+						visibility: 0, locked: false,   // REGION_VISIBILITY.LAYER: shown only on the Regions layer, not during play
 						behaviors: [{ name: "Change Level", type: "changeLevel", system: { movementActions: [] } }],
 					});
 				};
@@ -1296,7 +1296,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 							shapes: [{ type: "rectangle", x: cc.x - gridPx / 2, y: cc.y - gridPx / 2, width: gridPx, height: gridPx, hole: false }],
 							elevation: { bottom: fu[0].bottom, top: fu[fu.length - 1].top, topInclusive: false },
 							levels: fu.map(u => u.level.id),
-							visibility: 1, locked: false,
+							visibility: 0, locked: false,   // REGION_VISIBILITY.LAYER: shown only on the Regions layer, not during play
 							flags: { [MODULE_ID]: { spiral: conn } },
 							behaviors: [{ name: "Spiral Up/Down", type: "executeScript", system: { events: ["tokenMoveIn"], source: this._spiralRegionScript() } }],
 						});
