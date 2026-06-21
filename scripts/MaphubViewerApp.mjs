@@ -898,8 +898,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 		try {
 			let sceneName;
+			const caveName = (this._mapType === "cave") ? this._getCaveModel()?.name : null;
 			if (this._importContext?.sceneName) sceneName = this._importContext.sceneName;
 			else if (isRealm && realmData?.name) sceneName = realmData.name;
+			else if (caveName) sceneName = caveName;
 			else sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
 			let grid = this._getImportGridSize();
 
@@ -1530,7 +1532,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 */
 	_getCaveModel() {
 		const cw = this._iframe?.contentWindow;
-		let model = cw?.__maphubClasses?.["cave.model.Model"]?.inst ?? null;
+		const C = cw?.__maphubClasses;
+		// Bundled fork uses the bare `cave.*` namespace; Watabou's live single-file
+		// build (fetch-on-first-use) uses `com.watabou.cave.*`. Same fields either way.
+		let model = C?.["cave.model.Model"]?.inst ?? C?.["com.watabou.cave.model.Model"]?.inst ?? null;
 		model ??= cw?.maphubCaveAppInstance?.model ?? null;
 		return model;
 	}
@@ -1908,7 +1913,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 	_getCaveAlignSource() {
 		try {
 			const cw = this._iframe?.contentWindow;
-			const SquareGrid = cw?.__maphubClasses?.["cave.mapping.SquareGrid"];
+			const C = cw?.__maphubClasses;
+			const SquareGrid = C?.["cave.mapping.SquareGrid"] ?? C?.["com.watabou.cave.mapping.SquareGrid"];
 			const model = this._getCaveModel();
 			const rect = model?.rect;
 			const cellUnits = Number(SquareGrid?.size);

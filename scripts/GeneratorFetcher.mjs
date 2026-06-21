@@ -94,6 +94,18 @@ const MANIFESTS = {
 			"grammar.json", "gothic.json5", "tavern.json5",
 		],
 	},
+	cave: {
+		slug: "cave-generator", bundleDir: "to/cave-live", assetDir: "Assets",
+		js: [{ name: "Cave.js", from: "Cave.js", patch: {
+			anchor: "J.main()})(",
+			replace: 'J.main(),(typeof window!="undefined"?window:self).__maphubClasses=g})(',
+		} }],
+		assets: [
+			"bw.json", "grammar.json", "forest_grammar.json", "moonlight.json", "parchment.json",
+			"glade_autumn.json", "glade_default.json", "glade_outline.json", "glade_reef.json", "glade_tropical.json",
+			"demonic.txt", "given_female.txt", "given_male.txt",
+		],
+	},
 };
 
 async function ensureDir(path) {
