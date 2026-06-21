@@ -12,12 +12,11 @@ doors, multi-level floors, and stair regions included. No game system required.
 > only about shipping the generator *app code*.
 
 > **Fetch-on-first-use (license-clean path):** *Settings → Cartomancer → Download
-> Generators* downloads 5 of 6 generators (Realm, Dungeon, City, Village, Dwellings)
-> straight from `watabou.github.io` into your local data — applying small hooks on your
-> device — so they run locally and offline with all import features, and a distributed
-> build can ship **without** Watabou's code. (Cave/Glade stays bundled; its build isn't
-> published there.) Downloaded copies are preferred automatically; the bundled files
-> remain a fallback.
+> Generators* downloads all six generators (Realm, Dungeon, City, Village, Dwellings,
+> Cave/Glade) straight from `watabou.github.io` into your local data — applying small
+> hooks on your device — so they run locally and offline with all import features, and a
+> distributed build can ship **without** Watabou's code. Downloaded copies are preferred
+> automatically; the bundled files remain a fallback.
 
 ## Generators
 

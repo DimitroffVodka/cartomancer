@@ -18,10 +18,11 @@
  *     blob: URL with a <base href> so its relative assets resolve and the parent page
  *     can read its canvas/geometry.
  *
- * Coverage: realm, dungeon, city (mfcg), village, dwellings are Watabou's own
- * single-file builds (our bundle = live + a tiny hook) → fetchable. CAVE is NOT here:
- * our cave bundle is the third-party voluminor/maphub fork (ES-module split build),
- * which is not hosted on watabou.github.io, so it stays bundled.
+ * Coverage: all six generators are fetchable. Realm, dungeon, city (mfcg), village,
+ * dwellings, and cave are Watabou's own single-file builds (our bundle = live + a tiny
+ * hook, or for cave the live build via the `com.watabou.cave.*` namespace). Cave fetches
+ * Watabou's single-file build (to/cave-live loader), NOT our bundled voluminor/maphub
+ * fork — the fork stays as the bundled fallback only.
  */
 
 const MODULE_ID = "cartomancer";
