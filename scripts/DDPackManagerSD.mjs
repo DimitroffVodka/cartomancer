@@ -165,9 +165,9 @@ export async function extractDDPack(file, folderLabel, onProgress, selectedPaths
 
     const FP = FilePickerImpl();
     let uploaded = 0;
-    for (const entry of objects) {
+    const uploadEntry = async (entry) => {
         const { category, filename } = objectPathParts(entry.path);
-        if (!filename) continue;
+        if (!filename) return;
         const safeCategory = category.split("/").map(sanitizePathPart).filter(Boolean).join("/");
         const uploadDir = safeCategory ? `${basePath}/objects/${safeCategory}` : `${basePath}/objects`;
         const mime = /\.png$/i.test(filename) ? "image/png" : "image/webp";
@@ -180,7 +180,13 @@ export async function extractDDPack(file, folderLabel, onProgress, selectedPaths
         }
         uploaded++;
         onProgress?.(uploaded, objects.length);
-    }
+    };
+    // Bounded concurrency: a serial loop over 5000+ assets took minutes. A small pool
+    // (8 in-flight) cuts wall-clock substantially while staying gentle on the server.
+    const CONCURRENCY = 8;
+    let cursor = 0;
+    const worker = async () => { while (cursor < objects.length) await uploadEntry(objects[cursor++]); };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, objects.length) }, worker));
 
     const indexData = {
         packId,

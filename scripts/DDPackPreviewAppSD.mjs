@@ -189,12 +189,12 @@ export class DDPackPreviewApp extends ApplicationV2 {
         row.dataset.key = node.key;
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = selected === files.length;
+        checkbox.checked = files.length > 0 && selected === files.length;
         checkbox.indeterminate = selected > 0 && selected < files.length;
         checkbox.addEventListener("change", event => {
             event.stopPropagation();
             for (const file of files) checkbox.checked ? this.selected.add(file.path) : this.selected.delete(file.path);
-            this.#refresh();
+            this.#syncSelectionUI();
         });
         row.innerHTML = `<i class="fas ${node.children.length ? (this.open[node.key] ? "fa-folder-open" : "fa-folder") : "fa-images"}"></i>`;
         row.prepend(checkbox);
@@ -203,7 +203,9 @@ export class DDPackPreviewApp extends ApplicationV2 {
             if (event.target.closest("input")) return;
             if (node.children.length) this.open[node.key] = !this.open[node.key];
             this.viewKey = node.key;
-            this.#refresh();
+            // navigation changes tree + grid contents (not a selection-only update)
+            this.#renderTree();
+            this.#renderAssets();
         });
         const wrap = document.createElement("div");
         wrap.appendChild(row);
@@ -252,22 +254,46 @@ export class DDPackPreviewApp extends ApplicationV2 {
             button.addEventListener("click", () => {
                 const path = button.dataset.path;
                 this.selected.has(path) ? this.selected.delete(path) : this.selected.add(path);
-                this.#refresh();
+                this.#syncSelectionUI();
             });
         });
         // "All"/"None" act on the node's FULL set (not just the capped view).
         this.element.querySelector("[data-action='all']")?.addEventListener("click", () => {
             for (const file of allFiles) this.selected.add(file.path);
-            this.#refresh();
+            this.#syncSelectionUI();
         });
         this.element.querySelector("[data-action='none']")?.addEventListener("click", () => {
             for (const file of allFiles) this.selected.delete(file.path);
-            this.#refresh();
+            this.#syncSelectionUI();
         });
     }
 
-    #refresh() {
-        this.render();
+    // Update selection state in the DOM in place — no grid rebuild / IO churn
+    // (a full render() per selection toggle was laggy on 500-thumb categories).
+    #syncSelectionUI() {
+        this.element.querySelectorAll(".sdx-ddp-thumb").forEach(btn => {
+            btn.classList.toggle("selected", this.selected.has(btn.dataset.path));
+        });
+        this.element.querySelectorAll(".sdx-ddp-row").forEach(row => {
+            const node = this.#nodeByKey(row.dataset.key);
+            const cb = row.querySelector("input[type=checkbox]");
+            if (!node || !cb) return;
+            const files = this.#nodeFiles(node);
+            const sel = files.filter(f => this.selected.has(f.path)).length;
+            cb.checked = files.length > 0 && sel === files.length;
+            cb.indeterminate = sel > 0 && sel < files.length;
+        });
+        const node = this.#nodeByKey(this.viewKey);
+        const viewFiles = node ? this.#nodeFiles(node) : [];
+        const headCount = this.element.querySelector(".sdx-ddp-assets-head .asset-count");
+        if (headCount) headCount.textContent = `${viewFiles.filter(f => this.selected.has(f.path)).length} / ${viewFiles.length}`;
+        const footCount = this.element.querySelector(".sdx-ddp-count");
+        if (footCount) footCount.textContent = `${this.selected.size} / ${this.scan.totalAssets} selected`;
+        const extractBtn = this.element.querySelector("[data-action='extract-selected']");
+        if (extractBtn) {
+            extractBtn.disabled = this.selected.size === 0;
+            extractBtn.innerHTML = `<i class="fas fa-filter"></i> Extract Selected (${this.selected.size})`;
+        }
     }
 
     async #extract(selectedPaths) {
@@ -284,7 +310,7 @@ export class DDPackPreviewApp extends ApplicationV2 {
                 this.progress = done;
                 this.total = total;
                 this.status = `Extracting... ${done} / ${total}`;
-                if (done % 20 === 0 || done === total) this.render();
+                if ((done % 20 === 0 || done === total) && this.rendered) this.render();
             }, selectedPaths, this.scan.buffer);   // reuse the scan buffer — no second read
             await upsertDDPack(indexData);
             /* decor browser refreshes via the cartomancer.decorAssetsImported hook */
