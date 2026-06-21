@@ -617,7 +617,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 			}
 
 			if (align && align.cellPx > 0) {
-				const gridPx = Math.max(1, Math.round(align.cellPx));
+				// Normalize to a usable Foundry grid size. The generator's raw rendered
+				// cell px can be tiny (a small "Grid > Size" in Cave, "Small tiles" in
+				// Dungeon) — using it directly gave microscopic tokens and forced the
+				// user to retune Grid Size + Scene Scale. The image is rescaled by
+				// f = gridPx/cellPx below, so one generator cell still maps to exactly
+				// one Foundry square — just at a sensible on-screen size.
+				const gridPx = this._normalizeGridPx(align.cellPx);
 				const f = gridPx / align.cellPx;
 				const phase = (v) => (((Math.round(v) % gridPx) + gridPx) % gridPx);
 				const shiftX = phase(align.origin.x * f);
@@ -1328,6 +1334,19 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 	_getImportGridSize() {
 		return this._mapType === "dwellings" ? 260 : 50;
+	}
+
+	/**
+	 * Clamp a generator's rendered cell size (px) to a usable Foundry grid.size.
+	 * Generators render cells at whatever pixel size their own grid setting yields,
+	 * which can be tiny (Cave "Square grid > Size", Dungeon "Small tiles"). Using
+	 * that raw value as grid.size gives microscopic tokens; clamping (and letting
+	 * the caller rescale the image by gridPx/cellPx) keeps one generator cell ==
+	 * one Foundry square at a sensible size. Matches the Dwelling grid clamp range.
+	 */
+	_normalizeGridPx(cellPx) {
+		const px = Math.round(Number(cellPx) || 0);
+		return Math.max(64, Math.min(160, px || 64));
 	}
 
 	/**
