@@ -208,6 +208,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 */
 	_maybeAutoDetach() {
 		if (this._autoDetached) return;
+		// Location-generation opens (realm "Generate this map") exist to be imported
+		// immediately — and import reads the iframe canvas/JSON, which only works while
+		// the iframe is in THIS window. Keep these docked so the import succeeds.
+		if (this._importContext) return;
 		let pref = false;
 		try { pref = !!game.settings.get(MODULE_ID, "openGeneratorsDetached"); } catch { return; }
 		if (!pref) return;
@@ -216,6 +220,24 @@ export class MaphubViewerApp extends ApplicationV2 {
 			try { this.detachWindow?.(); }
 			catch (e) { console.warn(`${MODULE_ID} | auto-detach failed`, e); }
 		}, 50);
+	}
+
+	/** Poll until the generator iframe has redrawn (used after docking before import). */
+	async _waitForGeneratorReady(maxMs = 12000) {
+		const steps = Math.ceil(maxMs / 200);
+		for (let i = 0; i < steps; i++) {
+			await new Promise(r => setTimeout(r, 200));
+			try {
+				const cw = this._iframe?.contentWindow;
+				const c = this._iframe?.contentDocument?.querySelector("canvas");
+				if (!(c?.width > 0)) continue;
+				if (this._mapType === "dungeon" && !cw?.__sdxDungeonView) continue;
+				if (this._mapType === "dwellings" && !cw?.__sdxDwellView) continue;
+				if (this._mapType === "realm" && !cw?.__maphubClasses) continue;
+				return true;
+			} catch { /* keep polling */ }
+		}
+		return false;
 	}
 
 	// ── Header controls ───────────────────────────────────────────────────────
@@ -808,6 +830,22 @@ export class MaphubViewerApp extends ApplicationV2 {
 	/** Capture the current Maphub generator output and create a new Foundry scene. */
 	async _importScene() {
 		if (!game.user.isGM) return;
+
+		// Import reads the iframe's canvas/JSON, which only works while the iframe is in
+		// THIS window. If the generator is detached (core Detach or the auto-detach
+		// setting), dock it back first — the map reproduces from its seed — and wait for
+		// it to redraw before capturing. (_canAttach() is true only when detached.)
+		if (this._canAttach?.()) {
+			ui.notifications.info("Docking the generator back so the map can be imported…");
+			try {
+				if (this._mapType === "realm") {
+					const origin = this._extractRealmData()?.origin;
+					if (origin) { const u = new URL(origin); this._externalBase = `${u.origin}${u.pathname}`; this._queryString = u.search.replace(/^\?/, ""); }
+				}
+				await this.attachWindow();
+				await this._waitForGeneratorReady();
+			} catch (e) { console.warn(`${MODULE_ID} | dock-before-import failed`, e); }
+		}
 
 		const isDwellings = this._mapType === "dwellings";
 		const isCave = this._mapType === "cave";
