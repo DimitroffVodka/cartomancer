@@ -144,10 +144,12 @@ export class GeneratorFetcher {
 		let done = 0;
 		const tick = (label) => { done++; try { onProgress?.(done, total, label); } catch {} };
 		const savedAssets = [];
+		const renamed = {};   // blocked asset name -> saved .txt name (FilePicker rejects e.g. .json5)
 
 		await ensureDir(assetDir);
 
-		// 1) JS — fetch live, apply our hook, save as <name>.txt.
+		// 1) Fetch + hook-patch JS into memory (uploaded LAST, after any manifest renames).
+		const jsParts = [];
 		for (const j of m.js) {
 			const res = await fetch(`${live}/${j.from}`, { mode: "cors" });
 			if (!res.ok) throw new Error(`Could not fetch ${j.from} (${res.status}).`);
@@ -158,34 +160,53 @@ export class GeneratorFetcher {
 				}
 				text = text.replace(j.patch.anchor, j.patch.replace);
 			}
-			const ok = await uploadFile(base, `${j.name}.txt`, text, "text/plain");
-			if (!ok) throw new Error(`Foundry rejected upload of ${j.name}.txt.`);
-			tick(j.name);
+			jsParts.push({ j, text });
 		}
 
-		// 2) Assets — fetch verbatim; tolerate 404 / blocked types.
+		// 2) Assets — fetch + upload. FilePicker rejects some extensions (e.g. .json5);
+		//    for those, save the content as <name>.txt and remember to repoint the manifest.
 		for (const a of m.assets) {
 			try {
 				const res = await fetch(`${live}/${m.assetDir}/${a}`, { mode: "cors" });
-				if (res.ok) {
-					const blob = await res.blob();
-					const ok = await uploadFile(assetDir, a, blob, blob.type || "application/octet-stream");
-					if (ok) savedAssets.push(a);
-					else console.warn(`${MODULE_ID} | asset ${a} rejected by FilePicker (type not allowed)`);
+				if (!res.ok) { console.warn(`${MODULE_ID} | asset ${a} returned ${res.status}`); tick(a); continue; }
+				const blob = await res.blob();
+				if (await uploadFile(assetDir, a, blob, blob.type || "application/octet-stream")) {
+					savedAssets.push(a);
 				} else {
-					console.warn(`${MODULE_ID} | asset ${a} returned ${res.status}`);
+					const asTxt = `${a}.txt`;
+					if (await uploadFile(assetDir, asTxt, await blob.text(), "text/plain")) {
+						savedAssets.push(asTxt); renamed[a] = asTxt;
+					} else {
+						console.warn(`${MODULE_ID} | asset ${a} rejected by FilePicker even as .txt`);
+					}
 				}
 			} catch (e) { console.warn(`${MODULE_ID} | asset ${a} failed`, e); }
 			tick(a);
 		}
 
-		// 3) marker — records completion + what landed (drives isDownloaded()).
+		// 3) Repoint the JS asset manifest for any renamed assets, then upload the JS as <name>.txt.
+		//    Manifest paths are Haxe-serialized, length-prefixed + URL-encoded, e.g.
+		//    `y21:Assets%2Fgothic.json5`; appending `.txt` adds 4 to the length prefix.
+		for (const { j, text } of jsParts) {
+			let out = text;
+			for (const orig of Object.keys(renamed)) {
+				const esc = orig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+				out = out.replace(new RegExp(`y(\\d+):(${m.assetDir}%2F${esc})`),
+					(_mm, num, path) => `y${parseInt(num, 10) + 4}:${path}.txt`);
+			}
+			if (!(await uploadFile(base, `${j.name}.txt`, out, "text/plain"))) {
+				throw new Error(`Foundry rejected upload of ${j.name}.txt.`);
+			}
+			tick(j.name);
+		}
+
+		// 4) marker — drives isDownloaded(); records what landed + any renames.
 		await uploadFile(base, MARKER, JSON.stringify({
-			type, slug: m.slug, js: m.js.map((j) => j.name), assets: savedAssets,
+			type, slug: m.slug, js: m.js.map((j) => j.name), assets: savedAssets, renamed,
 		}, null, 2), "application/json");
 		tick(MARKER);
 
-		return { type, base, files: total, assetsSaved: savedAssets.length, assetsTotal: m.assets.length };
+		return { type, base, files: total, assetsSaved: savedAssets.length, assetsTotal: m.assets.length, renamed: Object.keys(renamed) };
 	}
 
 	/**
