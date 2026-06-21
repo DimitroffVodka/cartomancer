@@ -21,14 +21,32 @@ async function replacePlaceholder(div) {
 	if (!div.isConnected) return;
 
 	const type    = div.dataset.maphubType;
-	const qs      = div.dataset.maphubParams;
+	const qs      = div.dataset.maphubParams ?? "";
 	const extBase = div.dataset.maphubExternal;
-	if (!type || !qs || !extBase) return;
+	if (!type || !extBase) return;
+
+	// These values come from document/journal HTML (untrusted). `type` drives a
+	// filesystem path, so require a plain slug (no traversal); `extBase` becomes an
+	// iframe src, so only allow https to watabou.github.io — reject javascript:/data:/
+	// other origins that would run in the page's context.
+	if (!/^[a-z0-9][a-z0-9-]*$/i.test(type)) {
+		console.warn(`${MODULE_ID} | ignoring maphub placeholder — invalid type:`, type);
+		return;
+	}
+	let extUrl;
+	try { extUrl = new URL(extBase); } catch {
+		console.warn(`${MODULE_ID} | ignoring maphub placeholder — invalid external URL:`, extBase);
+		return;
+	}
+	if (extUrl.protocol !== "https:" || !/(^|\.)watabou\.github\.io$/i.test(extUrl.hostname)) {
+		console.warn(`${MODULE_ID} | refusing non-watabou maphub external URL:`, extBase);
+		return;
+	}
 
 	// Try the local maphub files first (express.static has no X-Frame-Options).
-	// Fall back to the external watabou URL if the local files aren't present.
+	// Fall back to the validated external watabou URL if the local files aren't present.
 	const localUrl = `${window.location.origin}/${LOCAL_MAPHUB_BASE}/to/${type}/index.html?${qs}`;
-	let src = `${extBase}?${qs}`;
+	let src = `${extUrl.origin}${extUrl.pathname}?${qs}`;
 	try {
 		const r = await fetch(localUrl, { method: "HEAD" });
 		if (r.ok) src = localUrl;
