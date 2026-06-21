@@ -143,6 +143,50 @@ export class GeneratorFetcher {
 		} catch { return false; }
 	}
 
+	/** Bundled-build JS path per generator (present only in the FULL package, not the lean one). */
+	static _bundledJs = { realm: "js/Perilous.js", dungeon: "js/Dungeon.js", cave: "js/Cave.js", mfcg: "js/mfcg-raw/mfcg.js", village: "js/village-raw/Village.js", dwellings: "js/dwellings-raw/Dwellings.js" };
+
+	/** True if this generator's bundled build is shipped (full package). */
+	static async bundleExists(type) {
+		const rel = this._bundledJs[type];
+		if (!rel) return false;
+		try { const r = await fetch(`/modules/${MODULE_ID}/scripts/maphub/${rel}`, { method: "HEAD" }); return r.ok; } catch { return false; }
+	}
+
+	/**
+	 * Ensure a generator can run: true if already downloaded or bundled; otherwise
+	 * (lean install, first use) prompt for a one-time download. Returns false if the
+	 * user cancels.
+	 */
+	static async ensureAvailable(type) {
+		if (!this.hasManifest(type)) return true;
+		if (await this.isDownloaded(type)) return true;
+		if (await this.bundleExists(type)) return true;
+		const NAMES = { realm: "Realm — Perilous Shores", dungeon: "One Page Dungeon", mfcg: "City — Medieval Fantasy City", village: "Village", dwellings: "Dwellings", cave: "Cave / Glade" };
+		const name = NAMES[type] ?? type;
+		const DialogV2 = foundry.applications.api.DialogV2;
+		let choice = "cancel";
+		try {
+			choice = await DialogV2.wait({
+				window: { title: "Cartomancer — Download Generator", icon: "fas fa-cloud-arrow-down" },
+				content: `<p>The <b>${name}</b> generator needs a one-time download (~1–1.5&nbsp;MB) from <code>watabou.github.io</code> before it can run. Afterwards it works locally and offline.</p><p>Download it now?</p>`,
+				buttons: [
+					{ action: "one", label: "Download", icon: "fas fa-cloud-arrow-down", default: true },
+					{ action: "all", label: "Download All" },
+					{ action: "cancel", label: "Cancel", icon: "fas fa-xmark" },
+				],
+			});
+		} catch { choice = "cancel"; }
+		if (choice === "cancel" || !choice) return false;
+		ui.notifications.info(`Cartomancer: downloading ${name}…`);
+		try {
+			if (choice === "all") await this.downloadAll((i, n, t) => { if (t && t !== "done") ui.notifications.info(`Cartomancer: downloading ${NAMES[t] ?? t}… (${i + 1}/${n})`); });
+			else await this.downloadGenerator(type);
+			ui.notifications.info("Cartomancer: generators ready.");
+			return await this.isDownloaded(type);
+		} catch (e) { ui.notifications.error(`Cartomancer: download failed — ${e?.message || e}`); return false; }
+	}
+
 	/**
 	 * Download a generator from watabou.github.io into local data, applying our hooks.
 	 * JS is saved as `<name>.txt` (FilePicker rejects .js); the loader inlines it at run.

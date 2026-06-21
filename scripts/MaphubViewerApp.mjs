@@ -2307,6 +2307,17 @@ export class MaphubViewerApp extends ApplicationV2 {
 			return ext;
 		}
 
+		// Fetch-on-first-use (lean install): make sure this generator is downloaded or
+		// bundled before running it; prompt for a one-time download if it's neither.
+		try {
+			const { GeneratorFetcher } = await import("./GeneratorFetcher.mjs");
+			if (!(await GeneratorFetcher.ensureAvailable(this._mapType))) {
+				return "data:text/html;charset=utf-8," + encodeURIComponent(
+					`<body style="font:14px sans-serif;color:#ccc;background:#111;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:2rem;">`
+					+ `<div>This generator hasn't been downloaded yet.<br><br>Open <b>Settings → Cartomancer → Download Generators</b>, then reopen it.</div></body>`);
+			}
+		} catch (e) { console.warn(`${MODULE_ID} | ensureAvailable check failed`, e); }
+
 		// Use the direct server URL for local maphub files when Foundry serves it
 		// as HTML. Some Foundry installs serve static .html module files as
 		// text/plain; in that case, wrap the same file in a same-origin Blob with
