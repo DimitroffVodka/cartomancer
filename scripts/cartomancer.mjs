@@ -13,6 +13,12 @@ export async function openDDPackSettings() {
 	new DDPackSettingsApp().render(true);
 }
 
+/** Open the decor browser (browse imported DungeonDraft decor, place on a scene). Singleton. */
+export async function openDecorBrowser() {
+	const { DecorBrowserApp } = await import("./DecorBrowserApp.mjs");
+	(DecorBrowserApp._instance ??= new DecorBrowserApp()).render(true);
+}
+
 Hooks.once("init", () => {
 	game.settings.register(MODULE_ID, "settlement.useLocalMaphub", {
 		name: "Use bundled (local) generators",
@@ -39,8 +45,8 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
 	try { registerMaphubHooks(); } catch (e) { console.error(`${MODULE_ID} | registerMaphubHooks failed`, e); }
 	const mod = game.modules.get(MODULE_ID);
-	if (mod) mod.api = { openLauncher, openDDPackSettings };
-	console.log(`${MODULE_ID} | ready — api: openLauncher(), openDDPackSettings()`);
+	if (mod) mod.api = { openLauncher, openDDPackSettings, openDecorBrowser };
+	console.log(`${MODULE_ID} | ready — api: openLauncher(), openDDPackSettings(), openDecorBrowser()`);
 });
 
 // Launch surface: a GM-only momentary BUTTON tool added to the existing Tokens
@@ -65,7 +71,16 @@ Hooks.on("getSceneControlButtons", (controls) => {
 			visible: true,
 			onChange: () => openLauncher(),
 		};
-		if (Array.isArray(group.tools)) group.tools.push(tool);
-		else group.tools[tool.name] = tool;
+		const decorTool = {
+			name: "cartomancer-decor",
+			title: "Cartomancer — Decor Browser",
+			icon: "fas fa-shapes",
+			button: true,
+			order: 901,
+			visible: true,
+			onChange: () => openDecorBrowser(),
+		};
+		if (Array.isArray(group.tools)) group.tools.push(tool, decorTool);
+		else { group.tools[tool.name] = tool; group.tools[decorTool.name] = decorTool; }
 	} catch (e) { console.error(`${MODULE_ID} | getSceneControlButtons failed`, e); }
 });

@@ -32,8 +32,11 @@ Pick a generator, tweak the map, then **Import Scene**.
 
 ## Roadmap
 
-- **Phase A (this):** Watabou generators + scene import (standalone). ✅
+- **Phase A:** Watabou generators + scene import (standalone). ✅
 - **Phase B:** DungeonDraft (`.dungeondraft_pack`) decor importer + decor browser.
+  - FilePicker import ✅ · decor browser (in progress) · URL-fetch import (planned)
+  - *Deferred (wanted later):* a curated in-app catalog of free, redistribution-OK
+    packs with direct download links — one-click download + import, **no bundled art**.
 - **Phase C:** scene ZIP export/import.
 - **Phase D:** licensing resolution → public release.
 
