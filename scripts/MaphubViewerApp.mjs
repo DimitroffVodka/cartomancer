@@ -173,6 +173,16 @@ export class MaphubViewerApp extends ApplicationV2 {
 			}, { once: true });
 		}
 
+		// Catch the generator's "Open in <generator>" links — they window.open() a
+		// watabou URL (e.g. Realm's "Open in MFCG" → city-generator). Open them inside
+		// Foundry as a new Cartomancer viewer instead of the OS browser. Install on
+		// load + a couple retries (the app wires up late).
+		iframe.addEventListener("load", () => {
+			this._installGeneratorLinkHook(iframe);
+			setTimeout(() => this._installGeneratorLinkHook(iframe), 1000);
+			setTimeout(() => this._installGeneratorLinkHook(iframe), 2500);
+		}, { once: true });
+
 		iframe.src = src;
 
 		container.replaceChildren(iframe);
@@ -344,6 +354,59 @@ export class MaphubViewerApp extends ApplicationV2 {
 			console.warn(`${MODULE_ID} | Failed to install Maphub save hook`, err);
 			return false;
 		}
+	}
+
+	/**
+	 * Override the generator iframe's window.open so its "Open in <generator>" links
+	 * (which window.open a watabou.github.io URL) open inside Foundry as a new
+	 * Cartomancer viewer instead of the OS default browser. Non-generator URLs fall
+	 * through to the original window.open. Idempotent.
+	 */
+	_installGeneratorLinkHook(iframe) {
+		try {
+			const cw = iframe?.contentWindow;
+			if (!cw || typeof cw.open !== "function" || cw.open.__sdxOpenHook) return false;
+			const originalOpen = cw.open.bind(cw);
+			const app = this;
+			const hooked = function (url, ...rest) {
+				try {
+					const parsed = app._parseGeneratorUrl(url);
+					if (parsed) { app._openLinkedGenerator(parsed); return null; }
+				} catch (e) { console.warn(`${MODULE_ID} | generator link hook failed`, e); }
+				return originalOpen(url, ...rest);
+			};
+			hooked.__sdxOpenHook = true;
+			cw.open = hooked;
+			return true;
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to install generator link hook`, err);
+			return false;
+		}
+	}
+
+	/** Map a watabou generator URL → viewer params, or null if it isn't one. */
+	_parseGeneratorUrl(url) {
+		let u;
+		try { u = new URL(String(url ?? ""), "https://watabou.github.io"); } catch { return null; }
+		if (!/(^|\.)watabou\.github\.io$/i.test(u.hostname)) return null;
+		const TYPE_BY_PATH = {
+			"city-generator": "mfcg",
+			"village-generator": "village",
+			"perilous-shores": "realm",
+			"caves": "cave",
+			"one-page-dungeon": "dungeon",
+			"dwellings": "dwellings",
+		};
+		const seg = (u.pathname.split("/").filter(Boolean)[0] || "").toLowerCase();
+		const type = TYPE_BY_PATH[seg];
+		if (!type) return null;
+		return { type, queryString: u.search.replace(/^\?/, ""), externalBase: `${u.origin}${u.pathname}` };
+	}
+
+	/** Open a generator linked from another ("Open in MFCG", etc.) in a new viewer. */
+	async _openLinkedGenerator({ type, queryString, externalBase }) {
+		const viewer = new MaphubViewerApp({ type, queryString, externalBase });
+		await viewer.render(true);
 	}
 
 	async _onMessage(event) {
