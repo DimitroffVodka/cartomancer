@@ -22,6 +22,51 @@ export async function openDecorBrowser() {
 	(DecorBrowserApp._instance ??= new DecorBrowserApp()).render(true);
 }
 
+/**
+ * Open the "Download Generators" dialog (fetch-on-first-use). GM only.
+ * Downloads Watabou's generators from watabou.github.io into local data so the module
+ * runs them without bundling Watabou's code. Cave stays bundled (not published there).
+ */
+export async function openGeneratorDownloader() {
+	if (!game.user?.isGM) { ui.notifications.warn("Only a GM can download generators."); return; }
+	const { GeneratorFetcher } = await import("./GeneratorFetcher.mjs");
+	const NAMES = { realm: "Realm — Perilous Shores", dungeon: "One Page Dungeon", mfcg: "City — Medieval Fantasy City", village: "Village", dwellings: "Dwellings" };
+	const types = Object.keys(GeneratorFetcher.manifests);
+	const rows = [];
+	for (const t of types) {
+		const dl = await GeneratorFetcher.isDownloaded(t);
+		rows.push(`<li style="padding:2px 0;">${dl ? "✅" : "⬇️"} ${NAMES[t] ?? t}${dl ? ' <em style="opacity:.6;">(downloaded)</em>' : ""}</li>`);
+	}
+	const content = `<div style="line-height:1.4;">
+		<p>Download Watabou's map generators from <code>watabou.github.io</code> into your local data. One-time (~1–1.5&nbsp;MB each); afterwards they run entirely locally and offline, with all import features intact.</p>
+		<ul style="list-style:none;padding-left:.25rem;margin:.5rem 0;">${rows.join("")}</ul>
+		<p style="opacity:.7;font-size:.9em;">Cave / Glade is bundled with the module (its build isn't published on watabou.github.io) and works without downloading.</p>
+	</div>`;
+	const DialogV2 = foundry.applications.api.DialogV2;
+	await DialogV2.wait({
+		window: { title: "Cartomancer — Download Generators", icon: "fas fa-cloud-arrow-down" },
+		position: { width: 460 },
+		content,
+		buttons: [
+			{
+				action: "all", label: "Download All", icon: "fas fa-cloud-arrow-down", default: true,
+				callback: async () => {
+					ui.notifications.info("Cartomancer: downloading generators from watabou.github.io…");
+					const res = await GeneratorFetcher.downloadAll((i, n, t) => {
+						if (t && t !== "done") ui.notifications.info(`Cartomancer: downloading ${NAMES[t] ?? t}… (${i + 1}/${n})`);
+					});
+					const ok = res.filter((r) => !r.error);
+					const bad = res.filter((r) => r.error);
+					ui.notifications[bad.length ? "warn" : "info"](
+						`Cartomancer: downloaded ${ok.length}/${res.length} generators${bad.length ? ` (failed: ${bad.map((b) => b.type).join(", ")})` : ""}. They now run locally + offline.`
+					);
+				},
+			},
+			{ action: "close", label: "Close", icon: "fas fa-xmark" },
+		],
+	});
+}
+
 Hooks.once("init", () => {
 	game.settings.register(MODULE_ID, "settlement.useLocalMaphub", {
 		name: "Use bundled (local) generators",
@@ -48,6 +93,17 @@ Hooks.once("init", () => {
 			async render() { openDDPackSettings(); return this; }
 		},
 	});
+	game.settings.registerMenu(MODULE_ID, "downloadGeneratorsMenu", {
+		name: "Map Generators",
+		label: "Download Generators",
+		hint: "Download Watabou's map generators from watabou.github.io into local data (one-time per generator). Afterwards they run locally + offline.",
+		icon: "fas fa-cloud-arrow-down",
+		restricted: true,
+		type: class extends foundry.applications.api.ApplicationV2 {
+			static DEFAULT_OPTIONS = { id: "cartomancer-downloadgen-menu-stub", window: { title: "" } };
+			async render() { openGeneratorDownloader(); return this; }
+		},
+	});
 });
 
 Hooks.once("ready", async () => {
@@ -56,11 +112,16 @@ Hooks.once("ready", async () => {
 	try {
 		const { RealmImporter } = await import("./RealmImporter.mjs");
 		RealmImporter.registerHooks();
+		const { GeneratorFetcher } = await import("./GeneratorFetcher.mjs");
 		const mod = game.modules.get(MODULE_ID);
 		if (mod) mod.api = {
-			openLauncher, openDDPackSettings, openDecorBrowser,
+			openLauncher, openDDPackSettings, openDecorBrowser, openGeneratorDownloader,
 			importRealm: (data, opts) => RealmImporter.importRealm(data, opts),
 			generateLocationFromJournal: (je) => RealmImporter.generateLocationFromJournal(je),
+			// Fetch-on-first-use: download generators from watabou.github.io into local data.
+			downloadGenerator: (t, cb) => GeneratorFetcher.downloadGenerator(t, cb),
+			downloadAllGenerators: (cb) => GeneratorFetcher.downloadAll(cb),
+			isGeneratorDownloaded: (t) => GeneratorFetcher.isDownloaded(t),
 		};
 	} catch (e) {
 		console.error(`${MODULE_ID} | RealmImporter wiring failed`, e);

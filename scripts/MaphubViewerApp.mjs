@@ -2293,6 +2293,16 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// bundled voluminor/maphub fork builds never draw to the canvas.
 		const RAW_BUNDLE_DIRS = { dwellings: "dwellings-raw", mfcg: "mfcg-raw", village: "village-raw" };
 		const bundleDir = RAW_BUNDLE_DIRS[this._mapType] ?? this._mapType;
+		// Fetch-on-first-use: if this generator was downloaded from watabou.github.io into
+		// local data, run our loader with the fetched JS inlined (no bundled Watabou code).
+		// Falls through to the bundled files when not downloaded (or on any error).
+		try {
+			const { GeneratorFetcher } = await import("./GeneratorFetcher.mjs");
+			if (GeneratorFetcher.hasManifest(this._mapType) && await GeneratorFetcher.isDownloaded(this._mapType)) {
+				const fetched = await GeneratorFetcher.buildFetchedSrc(this._mapType, this._queryString);
+				if (fetched) return fetched;
+			}
+		} catch (e) { console.warn(`${MODULE_ID} | fetched-generator load failed; using bundled`, e); }
 		const localBase = `${window.location.origin}/${BASE}/to/${bundleDir}/index.html`;
 		const localBaseDir = `${window.location.origin}/${BASE}/to/${bundleDir}/`;
 		const localParams = this._queryString ? `cb=${Date.now()}&${this._queryString}` : `cb=${Date.now()}`;
