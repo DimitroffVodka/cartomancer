@@ -25,7 +25,9 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 	/** @param {{ type: string, queryString: string, externalBase: string }} options */
 	constructor({ type, queryString = "", externalBase = "" } = {}) {
-		super({});
+		// Unique id per instance — the static DEFAULT_OPTIONS.id made every viewer a
+		// forced singleton (a second generator collided in the app registry + DOM id).
+		super({ id: `sdx-maphub-viewer-${type || "map"}-${foundry.utils.randomID(8)}` });
 		this._mapType = type;
 		this._queryString = queryString;
 		this._externalBase = externalBase;
@@ -321,15 +323,15 @@ export class MaphubViewerApp extends ApplicationV2 {
 			const foundrySaveAs = function (blob, filename, ...rest) {
 				if (filename) {
 					if (filename.endsWith(".json") || filename.endsWith(".pb")) {
-						void app._onMessage({ data: { type: "maphub_save_json", blob, filename } });
+						void app.#handleSave({ type: "maphub_save_json", blob, filename });
 						return;
 					}
 					if (filename.endsWith(".png")) {
-						void app._onMessage({ data: { type: "maphub_save_image", blob, filename, format: "png" } });
+						void app.#handleSave({ type: "maphub_save_image", blob, filename, format: "png" });
 						return;
 					}
 					if (filename.endsWith(".svg")) {
-						void app._onMessage({ data: { type: "maphub_save_image", blob, filename, format: "svg" } });
+						void app.#handleSave({ type: "maphub_save_image", blob, filename, format: "svg" });
 						return;
 					}
 				}
@@ -345,8 +347,17 @@ export class MaphubViewerApp extends ApplicationV2 {
 	}
 
 	async _onMessage(event) {
-		if (event.data && event.data.type === "maphub_save_json") {
-			const { blob, filename } = event.data;
+		// Global window 'message' listener: only act on messages from THIS app's
+		// iframe. It runs untrusted third-party generator code and any frame/tab on
+		// the same origin could otherwise post these and trigger file writes.
+		if (!event || event.source !== this._iframe?.contentWindow) return;
+		return this.#handleSave(event.data);
+	}
+
+	/** Persist a save payload (json/image) from the generator. Trusted/internal. */
+	async #handleSave(data) {
+		if (data && data.type === "maphub_save_json") {
+			const { blob, filename } = data;
 
 			const mapId = this._getMapIdFromQuery();
 			const saveFilename = `maphub_${mapId}.json`;
@@ -372,8 +383,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 				console.error(`${MODULE_ID} | Failed to save map state`, e);
 				ui.notifications.error("Failed to upload map state.");
 			}
-		} else if (event.data && event.data.type === "maphub_save_image") {
-			const { blob, filename, format } = event.data;
+		} else if (data && data.type === "maphub_save_image") {
+			const { blob, filename, format } = data;
 
 			const mapId = this._getMapIdFromQuery();
 			const timestamp = Date.now();
@@ -1621,6 +1632,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 		if (!(w > 0) || !(h > 0)) {
 			const loader = new foundry.canvas.TextureLoader();
 			const texture = await loader.loadTexture(img);
+			// loadTexture() resolves to BaseTexture | Spritesheet | null — guard the
+			// deref so a failed/odd load gives a clear error, not a cryptic TypeError
+			// or a scene with undefined dimensions.
+			if (!(texture?.width > 0) || !(texture?.height > 0)) throw new Error("Could not read the map image dimensions.");
 			w = texture.width; h = texture.height;
 		}
 		const sceneData = {
@@ -1724,31 +1739,37 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// Create a temporary image to determine dimensions before applying
 			const img = new Image();
 			img.onload = async () => {
-				const sceneUpdateData = {
-					width: img.width,
-					height: img.height,
-					padding: 0,
-					grid: { size: isDwellings ? 260 : 50 }
-				};
+				// Own try/catch: this runs async after the outer try has returned, so a
+				// scene.update rejection would otherwise be an unhandled rejection AND
+				// skip the dwelling window restore.
+				try {
+					const sceneUpdateData = {
+						width: img.width,
+						height: img.height,
+						padding: 0,
+						grid: { size: isDwellings ? 260 : 50 }
+					};
 
-				// Foundry V14 stores scene imagery on the embedded Level, not the
-				// legacy top-level scene background. Update the active level when
-				// available so "Set as Background" does not create a blank scene.
-				const foundryMajor = Number(game.version?.split?.(".")?.[0] ?? 0);
-				const levelId = canvas.level?.id ?? canvas.scene.levels?.contents?.[0]?.id;
-				if (foundryMajor >= 14 && levelId) {
-					sceneUpdateData[`levels.${levelId}.background.src`] = imgPath;
-				} else {
-					sceneUpdateData.background = { src: imgPath };
-				}
+					// Foundry V14 stores scene imagery on the embedded Level, not the
+					// legacy top-level scene background. Update the active level when
+					// available so "Set as Background" does not create a blank scene.
+					const foundryMajor = Number(game.version?.split?.(".")?.[0] ?? 0);
+					const levelId = canvas.level?.id ?? canvas.scene.levels?.contents?.[0]?.id;
+					if (foundryMajor >= 14 && levelId) {
+						sceneUpdateData[`levels.${levelId}.background.src`] = imgPath;
+					} else {
+						sceneUpdateData.background = { src: imgPath };
+					}
 
-				await canvas.scene.update(sceneUpdateData);
-				ui.notifications.info(`Scene background updated to ${img.width}x${img.height}!`);
+					await canvas.scene.update(sceneUpdateData);
+					ui.notifications.info(`Scene background updated to ${img.width}x${img.height}!`);
 
-				if (isDwellings) {
-					this._restoreAfterCapture(oldState);
-				} else {
-					this.close(); // Close the dialog
+					if (isDwellings) this._restoreAfterCapture(oldState);
+					else this.close();
+				} catch (e) {
+					console.error(`${MODULE_ID} | Failed to set scene background`, e);
+					ui.notifications.error(`Failed to set scene background: ${e?.message || e}`);
+					if (isDwellings) this._restoreAfterCapture(oldState);
 				}
 			};
 			img.onerror = () => {
@@ -1791,21 +1812,26 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// Create a temporary image to determine dimensions before applying
 			const img = new Image();
 			img.onload = async () => {
-				const tileData = {
-					texture: { src: imgPath },
-					width: img.width,
-					height: img.height,
-					x: canvas.stage.pivot.x - (img.width / 2),
-					y: canvas.stage.pivot.y - (img.height / 2)
-				};
+				// Own try/catch — see _setAsBackground: a createEmbeddedDocuments
+				// rejection here would otherwise be unhandled and skip the restore.
+				try {
+					const tileData = {
+						texture: { src: imgPath },
+						width: img.width,
+						height: img.height,
+						x: canvas.stage.pivot.x - (img.width / 2),
+						y: canvas.stage.pivot.y - (img.height / 2)
+					};
 
-				await canvas.scene.createEmbeddedDocuments("Tile", [tileData]);
-				ui.notifications.info(`Map added as a ${img.width}x${img.height} tile!`);
+					await canvas.scene.createEmbeddedDocuments("Tile", [tileData]);
+					ui.notifications.info(`Map added as a ${img.width}x${img.height} tile!`);
 
-				if (isDwellings) {
-					this._restoreAfterCapture(oldState);
-				} else {
-					this.close(); // Close the dialog
+					if (isDwellings) this._restoreAfterCapture(oldState);
+					else this.close();
+				} catch (e) {
+					console.error(`${MODULE_ID} | Failed to add map as tile`, e);
+					ui.notifications.error(`Failed to add map as tile: ${e?.message || e}`);
+					if (isDwellings) this._restoreAfterCapture(oldState);
 				}
 			};
 			img.onerror = () => {
