@@ -166,3 +166,12 @@ Hooks.on("getSceneControlButtons", (controls) => {
 		else { group.tools[tool.name] = tool; group.tools[decorTool.name] = decorTool; }
 	} catch (e) { console.error(`${MODULE_ID} | getSceneControlButtons failed`, e); }
 });
+
+// Dev-only: register in-client integration tests when the Quench module is active. This
+// hook never fires (and the test code never loads) for normal users who don't have Quench.
+Hooks.on("quenchReady", async (quench) => {
+	try {
+		const { registerImportBatches } = await import("../test/quench/import.batch.mjs");
+		registerImportBatches(quench);
+	} catch (e) { console.error(`${MODULE_ID} | Quench batch registration failed`, e); }
+});
