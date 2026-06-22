@@ -17,6 +17,7 @@ const FilePicker = foundry.applications.apps.FilePicker?.implementation ?? globa
  */
 
 import { OnePageParserSD } from "./maphub/OnePageParserSD.mjs";
+import { normalizeGridPx, dwellCoarseGridPx, dwellGridSize, dungeonCellPx, parseDungeonGridScale, parseDwellDoubleGrid } from "./lib/grid.mjs";
 
 const MODULE_ID = "cartomancer";
 const { ApplicationV2 } = foundry.applications.api;
@@ -1114,6 +1115,23 @@ export class MaphubViewerApp extends ApplicationV2 {
 		} catch (_) { return null; }
 	}
 
+	/**
+	 * Force a synchronous OpenFL render of the generator's stage. The render loop is
+	 * driven by requestAnimationFrame, which the browser fully pauses whenever the
+	 * page is hidden (`document.hidden` — a detached/background generator window, or a
+	 * headless automation tab). With no rAF tick the WebGL buffer never repaints after
+	 * setFloor(), so the capture is blank and the dwelling drops to the flat generic
+	 * fallback. The Stage's __renderAfterEvent() is OpenFL's own "paint now, outside
+	 * the frame loop" hook, so it produces a fresh frame even with rAF paused.
+	 */
+	_forceDwellRender(view) {
+		try {
+			let node = view;
+			while (node && (node.parent || node.__parent)) node = node.parent || node.__parent;
+			node?.__renderAfterEvent?.();
+		} catch (_) { /* best-effort; the retry loop + fallback still apply */ }
+	}
+
 	/** Snapshot the generator's live canvas to an offscreen canvas (or null). */
 	_grabCanvas() {
 		try {
@@ -1230,6 +1248,12 @@ export class MaphubViewerApp extends ApplicationV2 {
 						// whole dwelling to the flat generic fallback.
 						if (attempt > 0) { try { this._iframe?.contentWindow?.dispatchEvent(new Event("resize")); } catch (_) { } }
 						await new Promise(r => setTimeout(r, attempt === 0 ? 900 : 350));
+						// The render loop runs on requestAnimationFrame, which the browser PAUSES
+						// while the page is hidden (detached/background window, or a headless tab),
+						// so after setFloor() nothing repaints and the grab is blank. Force a
+						// synchronous paint so the transform read + capture below land on a freshly
+						// rendered frame regardless of focus.
+						this._forceDwellRender(view);
 						const m = view.map.__getRenderTransform();
 						const cap = this._grabCanvas();
 						if (!m || !Number.isFinite(m.a) || !m.a || !cap) continue;
@@ -1250,13 +1274,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const ROOF = 2;
 				const mi = Math.floor(cmi - ROOF), mj = Math.floor(cmj - ROOF), Mi = Math.ceil(cMi + ROOF), Mj = Math.ceil(cMj + ROOF);
 				const cellsW = Math.max(1, Mj - mj), cellsH = Math.max(1, Mi - mi);
-				const gridPx = Math.max(60, Math.min(160, Math.round(units[baseIdx].M.a * 1.8)));
+				const gridPx = dwellCoarseGridPx(units[baseIdx].M.a);
 				// "Double grid" (Plan view ▸ Grid) draws the building grid at 2× density
 				// (half-size cells). Walls/rooms stay on the coarse building cell (gridPx),
 				// so keep the image + walls at gridPx but halve the Foundry grid so one
 				// small cell = one Foundry square (walls then fall on every other line) —
 				// matching what the generator displays.
-				const dwellGridSize = this._getDwellDoubleGrid() ? Math.max(30, Math.round(gridPx / 2)) : gridPx;
+				const dwellGrid = dwellGridSize(gridPx, this._getDwellDoubleGrid());
 				const sceneW = Math.round(cellsW * gridPx);
 				const sceneH = Math.round(cellsH * gridPx);
 				const nodeToScene = (j, i) => ({ x: Math.round((j - mj) * gridPx), y: Math.round((i - mi) * gridPx) });
@@ -1279,7 +1303,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const dwellDefaults = this._getSceneImportDefaults();
 				const sceneData = {
 					name: sceneName, width: sceneW, height: sceneH,
-					grid: { size: dwellGridSize, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
+					grid: { size: dwellGrid, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
 					fog: { mode: dwellDefaults.fogMode }, tokenVision: dwellDefaults.tokenVision,
 					background: { src: units[baseIdx].bg },
 					levels: units.map(u => ({ name: u.name, elevation: { bottom: u.bottom, top: u.top }, background: levelBg(u.bg), textures: fillTex })),
@@ -1814,8 +1838,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 * one Foundry square at a sensible size. Matches the Dwelling grid clamp range.
 	 */
 	_normalizeGridPx(cellPx) {
-		const px = Math.round(Number(cellPx) || 0);
-		return Math.max(64, Math.min(160, px || 64));
+		return normalizeGridPx(cellPx);
 	}
 
 	/**
@@ -1933,9 +1956,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			for (let i = 0; i < cw.localStorage.length; i++) {
 				const k = cw.localStorage.key(i);
 				if (k && k.includes(uuid) && k.includes("com.watabou.dungeon")) {
-					const m = (cw.localStorage.getItem(k) || "").match(/gridScale(?:i(-?\d+)|z)/);
-					const v = (m && m[1] != null) ? parseInt(m[1], 10) : 1;
-					return v >= 1 ? v : 1;
+					return parseDungeonGridScale(cw.localStorage.getItem(k));
 				}
 			}
 			return 1;   // not persisted → default
@@ -1956,7 +1977,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			for (let i = 0; i < cw.localStorage.length; i++) {
 				const k = cw.localStorage.key(i);
 				if (k && k.includes(uuid) && k.includes("com.watabou.house")) {
-					return /doubleGridt/.test(cw.localStorage.getItem(k) || "");
+					return parseDwellDoubleGrid(cw.localStorage.getItem(k));
 				}
 			}
 			return false;   // not persisted → off
@@ -2091,7 +2112,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// square should be one *small* tile. Walls sit on logical-cell boundaries,
 			// so they land on every gridScale-th line; the image rescale keeps it exact.
 			const gridScale = this._getDungeonGridScale();
-			const cellPx = (cell / Math.max(1, gridScale)) * Math.hypot(M.a, M.b);
+			const cellPx = dungeonCellPx(cell, gridScale, Math.hypot(M.a, M.b));
 			return { toPixel, cellPx };
 		} catch (err) {
 			console.warn(`${MODULE_ID} | Failed to read dungeon render transform`, err);
