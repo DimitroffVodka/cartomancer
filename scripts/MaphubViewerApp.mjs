@@ -839,11 +839,12 @@ export class MaphubViewerApp extends ApplicationV2 {
 	async _importScene() {
 		if (!game.user.isGM) return;
 
-		// Import reads the iframe's canvas/JSON, which only works while the iframe is in
-		// THIS window. If the generator is detached (core Detach or the auto-detach
-		// setting), dock it back first — the map reproduces from its seed — and wait for
-		// it to redraw before capturing. (_canAttach() is true only when detached.)
-		if (this._canAttach?.()) {
+		// Capturing reads the iframe's live canvas + model, which works even while the
+		// window is detached. Only dock back if the canvas is genuinely unreachable:
+		// docking rebuilds the iframe from the seed/permalink, which regenerates the base
+		// map and DESTROYS the user's manual edits (renamed features, added towns,
+		// paintings, moved labels…). (_canAttach() is true only when detached.)
+		if (this._canAttach?.() && !this._isMapCanvasReadable()) {
 			ui.notifications.info("Docking the generator back so the map can be imported…");
 			try {
 				if (this._mapType === "realm") {
@@ -2193,6 +2194,16 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 * to ensure the internal map canvas redraws at high resolution.
 	 * @returns {Promise<{ position: object, style: object }>} The previous window state.
 	 */
+	/**
+	 * True when the generator's <canvas> is reachable from this document (so the map can
+	 * be captured/read). It stays reachable while the window is detached, which lets the
+	 * import skip the destructive dock-back rebuild in the normal case.
+	 */
+	_isMapCanvasReadable() {
+		try { return (this._iframe?.contentDocument?.querySelector("canvas")?.width || 0) > 0; }
+		catch (e) { return false; }   // cross-origin / inaccessible
+	}
+
 	async _maximizeForCapture() {
 		ui.notifications.info("Preparing map for high-res capture...");
 
