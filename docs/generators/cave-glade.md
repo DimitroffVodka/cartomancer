@@ -292,6 +292,21 @@ a map you like or send it to a co-GM, since there's no built-in save slot.
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+A cave/glade is a tactical battlemap, so Cartomancer imports it on a grid.
+
+**What Cartomancer sets automatically**
+- A **square-grid** scene: the cave's rendered cell is normalized to a usable Foundry square and aligned to the canvas origin, so one cave cell = one Foundry square with no drift. You don't need to set an exact cell size in the generator.
+- Fog and token-vision are left **on** for play.
+
+**Set these in the generator before *Import Scene***
+- **Grid ▸ Square** — press `G` to cycle Square → Hexagonal → Hidden and stop on **Square** so the generator's grid matches Foundry's. (The size is normalized on import, so any square size works.)
+- Pick the mode you want: **Cave mode** (dark rock, dungeon feel) or **Glade mode** (`F`, outdoor clearing) — both import the *same* geometry, only the rendering differs.
+- Keep a clean style and avoid heavy decorative overlays that hide walkable floor.
+
+---
+
 ## Tips & tricks
 
 - **Learn the toggles, skip the menu.** `Enter` for a new map, `Tab` for tags,

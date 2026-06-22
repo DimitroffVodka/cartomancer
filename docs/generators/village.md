@@ -199,6 +199,21 @@ Your current village (its seed, tags, and tree seed) is encoded in the page URL.
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+A village is a settlement overview/handout rather than a tactical grid.
+
+**What Cartomancer sets automatically**
+- A **gridless** scene, **fully revealed** — fog-of-war and token-vision are turned **off** so the whole village reads as a handout.
+
+**Set these in the generator before *Import Scene***
+- Use a larger **size** tag (e.g. *town*) in **Parameters…** for more detail and a higher-resolution capture.
+- **Layers**: hide the **Title** plate if you don't want the name baked into the image; toggle other layers (Fields, Orchards, Trees) to taste for a cleaner look.
+- Choose a **Style preset** (`1`–`6`): **B&W** / **Minimal** read well as printed handouts, **Default** / **Night** for color.
+- If you need a building interior to run a fight, right-click a house → **Open in Dwellings** (that *does* import as a gridded battlemap).
+
+---
+
 ## Tips & tricks
 
 - **Lock a layout, vary the details.** Found a road/building arrangement you like? Don't press Reroll. Instead reroll just the **trees** (`Shift+T`) or tweak the **style** (`C`) to get variations without losing the layout.

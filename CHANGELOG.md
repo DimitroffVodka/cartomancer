@@ -2,6 +2,36 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## Unreleased
+
+### Changed
+- **Per-generator scene defaults on import**: battlemaps (One Page Dungeon, Cave / Glade,
+  Dwellings) now import with a **square** grid plus fog/token-vision for tactical play
+  (their cells already map 1:1 to Foundry squares); the settlement overview maps
+  (City / MFCG, Village) import **gridless** and **fully revealed** (no fog/token-vision),
+  since they're backdrops meant to be shown whole. Previously every imported scene
+  inherited the world's default grid type. *"Set as Background" on an existing scene is
+  unchanged — it respects the scene you already configured.*
+
+### Added
+- **Perilous Shores → flat-top hex scenes.** Realm maps now import as a Foundry **flat-top
+  hex grid** (`HEXODDQ`) aligned to the generator's own hexes: Cartomancer forces flat-top
+  hexes in the generator, reads its hex radius + render transform, matches Foundry's
+  `grid.size` to the native hex pitch, and phase-aligns the lattice so **one Foundry hex =
+  one map hex**. Imported fully revealed (no fog/vision) for hexcrawling.
+- **Wiki**: every generator guide gained a *Recommended settings for Foundry import*
+  section — what Cartomancer sets automatically, plus the in-generator menu settings
+  that capture cleanly.
+
+### Fixed
+- Imported scenes set fog exploration via the correct **`fog.mode`** field. Foundry v13+
+  renamed it from the old top-level `fogExploration` (which was silently dropped), so
+  overview maps now reliably import fully revealed.
+- Removed the iframe `sandbox` attribute on the generator viewer. The framed content is
+  the module's own first-party generator and the parent reads it same-origin, so the
+  sandbox isolated nothing while tripping Chrome's *"can escape its sandboxing"* console
+  warning. (Matches the inline journal viewer, which never sandboxed its iframe.)
+
 ## 0.2.3 — 2026-06-21
 
 ### Fixed

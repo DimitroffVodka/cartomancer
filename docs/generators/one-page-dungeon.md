@@ -368,6 +368,23 @@ the look and parameters you set last time.
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+Cartomancer captures the on-screen map and builds a Foundry scene from it. For a dungeon (a tactical battlemap):
+
+**What Cartomancer sets automatically**
+- A **square-grid** scene where one dungeon cell = one Foundry square — the captured image is rescaled and aligned to the canvas origin so Foundry's grid lines fall exactly on the cells (no manual offset/scale tuning).
+- The map is forced **axis-aligned** at capture time, so *Rotate-to-fit* can't tilt the walls relative to the grid.
+- **Walls and doors** are imported as Foundry walls; fog and token-vision are left **on** for play.
+
+**Set these in the generator before *Import Scene***
+- **Layers ▸ Grid** → any visible style (Dotted / Dashed / Solid). Leave **Small tiles** *off* (`Shift+G`) unless you want half-size cells — small tiles make each Foundry square half a dungeon cell.
+- **Notes ▸ Off** (`N`) and **Layers ▸ Title & story → off**: note blocks and the title bake into the captured image and clutter a battlemap. (Use **Legend**/**Numbers** mode only if you deliberately want a keyed image.)
+- **Style → Monochrome** (`M`) or any high-contrast style gives the crispest walls.
+- *Rotate-to-fit* can stay however you like — Cartomancer overrides it during capture.
+
+---
+
 ## Tips & tricks
 
 - **Generate first, tweak second.** Hit `Enter` repeatedly until you get a base

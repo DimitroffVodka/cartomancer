@@ -5,8 +5,8 @@ const FilePicker = foundry.applications.apps.FilePicker?.implementation ?? globa
  * MaphubViewerApp.mjs
  * ApplicationV2 window that displays a settlement map in an iframe.
  * The iframe is created entirely via DOM (not via HTML string / innerHTML) so
- * that sandbox="allow-same-origin" is never stripped by FoundryVTT's journal
- * HTML sanitizer.
+ * the parent can wire load handlers and read into the same-origin frame without
+ * FoundryVTT's journal HTML sanitizer stripping attributes.
  *
  * For local maphub: serves index.html directly from the module's static path.
  * express.static does NOT add X-Frame-Options, so the iframe loads fine.
@@ -17,6 +17,7 @@ const FilePicker = foundry.applications.apps.FilePicker?.implementation ?? globa
  */
 
 import { OnePageParserSD } from "./maphub/OnePageParserSD.mjs";
+import { normalizeGridPx, dwellCoarseGridPx, dwellGridSize, dungeonCellPx, parseDungeonGridScale, parseDwellDoubleGrid } from "./lib/grid.mjs";
 
 const MODULE_ID = "cartomancer";
 const { ApplicationV2 } = foundry.applications.api;
@@ -94,8 +95,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 	/**
 	 * After the container div is in the DOM, build the src and inject the
-	 * iframe entirely via DOM — iframe.sandbox is a DOMTokenList, so values
-	 * set here are NEVER passed through FoundryVTT's HTML sanitizer.
+	 * iframe entirely via DOM so we can wire load handlers and read into the
+	 * same-origin frame without FoundryVTT's HTML sanitizer interfering.
 	 */
 	async _onRender(_context, _options) {
 		window.addEventListener("message", this._onMessage);
@@ -149,12 +150,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 		const iframe = document.createElement("iframe");
 		iframe.style.cssText = "width:100%;height:100%;border:none;display:block;";
 		iframe.title = "Settlement Map";
-		// DOMTokenList — bypasses all string-based sanitization
-		iframe.sandbox.add("allow-scripts");
-		iframe.sandbox.add("allow-same-origin");
-		iframe.sandbox.add("allow-forms");
-		iframe.sandbox.add("allow-popups");
-		iframe.sandbox.add("allow-downloads");
+		// No sandbox attribute: the framed content is the module's own first-party
+		// generator, and the parent must read into it same-origin (contentDocument,
+		// contentWindow, shared localStorage). allow-scripts + allow-same-origin
+		// together neuter the sandbox anyway and only trip Chrome's "can escape its
+		// sandboxing" warning, so we omit it entirely (matches MaphubSD's iframe).
 
 		if (loadedJsonText) {
 			iframe.onload = () => {
@@ -200,6 +200,14 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 		container.replaceChildren(iframe);
 		this._iframe = iframe;
+
+		// Realm (Perilous Shores): default to flat-topped hexes so the map displays —
+		// and imports as — a Foundry-friendly flat-top hex grid.
+		if (this._mapType === "realm") this._forceRealmFlatTopWhenReady();
+
+		// Dwellings: default to the 2× "Double grid" so the building displays — and
+		// imports as — a finer Foundry grid (one small cell per square).
+		if (this._mapType === "dwellings") this._forceDwellDoubleGridWhenReady();
 
 		this._maybeAutoDetach();
 	}
@@ -836,11 +844,14 @@ export class MaphubViewerApp extends ApplicationV2 {
 	async _importScene() {
 		if (!game.user.isGM) return;
 
-		// Import reads the iframe's canvas/JSON, which only works while the iframe is in
-		// THIS window. If the generator is detached (core Detach or the auto-detach
-		// setting), dock it back first — the map reproduces from its seed — and wait for
-		// it to redraw before capturing. (_canAttach() is true only when detached.)
-		if (this._canAttach?.()) {
+		// Capturing reads the iframe's live canvas + model, which works for every
+		// generator even while the window is detached (the dungeon's walls now come
+		// from dungeon.getData() directly — see _exportCurrentDungeonJson). So we DON'T
+		// dock back: docking rebuilds the iframe from the seed/permalink, which
+		// regenerates the base map and DESTROYS the user's manual edits (renamed
+		// features, added towns, paintings, moved labels). Only dock back if the canvas
+		// is genuinely unreachable. (_canAttach() is true only when detached.)
+		if (this._canAttach?.() && !this._isMapCanvasReadable()) {
 			ui.notifications.info("Docking the generator back so the map can be imported…");
 			try {
 				if (this._mapType === "realm") {
@@ -856,6 +867,9 @@ export class MaphubViewerApp extends ApplicationV2 {
 		const isCave = this._mapType === "cave";
 		const isDungeon = this._mapType === "dungeon";
 		const isRealm = this._mapType === "realm";
+		// Realm flat-top is defaulted on load (_forceRealmFlatTopWhenReady); we do NOT
+		// re-force it here, so a user who deliberately switched to Pointy is respected —
+		// the import follows whatever hex orientation the map currently has.
 
 		// Realm: offer to also create cross-linked journals for the linked
 		// cities/villages/dungeons (each map generates on demand). Extract the realm
@@ -874,9 +888,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// Bb.exportJSON inside the generator which flows through our saveAs
 		// hook → _lastSavedDungeonJson.
 		if (isDungeon) {
+			// Read the live (edited) dungeon JSON straight from the controller — works
+			// detached, so the dungeon imports without a rebuild and keeps edits.
 			const exported = await this._exportCurrentDungeonJson();
 			if (!exported) {
-				ui.notifications.warn("Could not export dungeon JSON. Make sure the One Page Dungeon generator is fully loaded before Import Scene.");
+				ui.notifications.warn("Could not read the dungeon data. Make sure the One Page Dungeon generator is fully loaded before Import Scene.");
 				return;
 			}
 		}
@@ -933,6 +949,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// scale+crop to any captured-canvas pixel.
 			let mapPx = (x, y) => ({ x: Math.round(x), y: Math.round(y) });
 			let align = null;
+			let realmAlign = null;
+			let realmGridType = null;
 			let dungeonToPixel = null;
 			let caveDpr = 1;
 			if (isDungeon) {
@@ -958,6 +976,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 					caveDpr = (cc && cc.clientWidth > 0) ? (cc.width / cc.clientWidth) : (this._iframe?.contentWindow?.devicePixelRatio || 1);
 					align = { toPixel: ca.toPixel, cellPx: ca.cellPx * caveDpr, origin: { x: ca.origin.x * caveDpr, y: ca.origin.y * caveDpr } };
 				}
+			} else if (isRealm) {
+				realmAlign = this._getRealmAlignSource();
 			}
 
 			if (align && align.cellPx > 0) {
@@ -976,9 +996,30 @@ export class MaphubViewerApp extends ApplicationV2 {
 				importImg = aligned.path; importW = aligned.width; importH = aligned.height;
 				grid = gridPx;
 				mapPx = (x, y) => ({ x: Math.round(x * f - shiftX), y: Math.round(y * f - shiftY) });
+			} else if (realmAlign) {
+				// Realm (Perilous Shores): a regular flat/pointy hex lattice. Both the
+				// generator and Foundry draw regular hexagons, so matching the row pitch
+				// matches the whole lattice — only a 2D phase offset remains, applied with
+				// the same scale+crop as the square path. grid.size is set to match the
+				// native hex pitch (rounded to an integer; the image is rescaled by f to
+				// keep the match exact), and the phase is computed against Foundry's own
+				// HexagonalGrid so it's correct for the exact hex type.
+				const { gridType, R, sImg, toPixel, sampleCenter, isFlat, isEven } = realmAlign;
+				const nativeS = Math.sqrt(3) * R * sImg;                 // Foundry grid.size matching native pitch
+				const gridPx = Math.max(60, Math.min(200, Math.round(nativeS)));
+				const f = gridPx / nativeS;                              // rescale image so pitch == integer gridPx
+				const fg = new foundry.grid.HexagonalGrid({ size: gridPx, columns: isFlat, even: isEven });
+				const G = toPixel(sampleCenter.x, sampleCenter.y);
+				const Gs = { x: G.x * f, y: G.y * f };
+				const Fc = fg.getCenterPoint(fg.getOffset({ x: Gs.x, y: Gs.y }));
+				const shiftX = Gs.x - Fc.x, shiftY = Gs.y - Fc.y;
+				const aligned = await this._renderAlignedImage(imgPath, f, shiftX, shiftY);
+				importImg = aligned.path; importW = aligned.width; importH = aligned.height;
+				grid = gridPx;
+				realmGridType = gridType;
 			}
 
-			let scene = await this._createImageScene({ name: sceneName, img: importImg, grid, width: importW, height: importH });
+			let scene = await this._createImageScene({ name: sceneName, img: importImg, grid, width: importW, height: importH, gridType: realmGridType });
 
 			if (isDungeon) {
 				try {
@@ -1072,6 +1113,23 @@ export class MaphubViewerApp extends ApplicationV2 {
 			try { layer.visible = visible; } catch (_) { }
 			return layer;
 		} catch (_) { return null; }
+	}
+
+	/**
+	 * Force a synchronous OpenFL render of the generator's stage. The render loop is
+	 * driven by requestAnimationFrame, which the browser fully pauses whenever the
+	 * page is hidden (`document.hidden` — a detached/background generator window, or a
+	 * headless automation tab). With no rAF tick the WebGL buffer never repaints after
+	 * setFloor(), so the capture is blank and the dwelling drops to the flat generic
+	 * fallback. The Stage's __renderAfterEvent() is OpenFL's own "paint now, outside
+	 * the frame loop" hook, so it produces a fresh frame even with rAF paused.
+	 */
+	_forceDwellRender(view) {
+		try {
+			let node = view;
+			while (node && (node.parent || node.__parent)) node = node.parent || node.__parent;
+			node?.__renderAfterEvent?.();
+		} catch (_) { /* best-effort; the retry loop + fallback still apply */ }
 	}
 
 	/** Snapshot the generator's live canvas to an offscreen canvas (or null). */
@@ -1190,6 +1248,12 @@ export class MaphubViewerApp extends ApplicationV2 {
 						// whole dwelling to the flat generic fallback.
 						if (attempt > 0) { try { this._iframe?.contentWindow?.dispatchEvent(new Event("resize")); } catch (_) { } }
 						await new Promise(r => setTimeout(r, attempt === 0 ? 900 : 350));
+						// The render loop runs on requestAnimationFrame, which the browser PAUSES
+						// while the page is hidden (detached/background window, or a headless tab),
+						// so after setFloor() nothing repaints and the grab is blank. Force a
+						// synchronous paint so the transform read + capture below land on a freshly
+						// rendered frame regardless of focus.
+						this._forceDwellRender(view);
 						const m = view.map.__getRenderTransform();
 						const cap = this._grabCanvas();
 						if (!m || !Number.isFinite(m.a) || !m.a || !cap) continue;
@@ -1210,7 +1274,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const ROOF = 2;
 				const mi = Math.floor(cmi - ROOF), mj = Math.floor(cmj - ROOF), Mi = Math.ceil(cMi + ROOF), Mj = Math.ceil(cMj + ROOF);
 				const cellsW = Math.max(1, Mj - mj), cellsH = Math.max(1, Mi - mi);
-				const gridPx = Math.max(60, Math.min(160, Math.round(units[baseIdx].M.a * 1.8)));
+				const gridPx = dwellCoarseGridPx(units[baseIdx].M.a);
+				// "Double grid" (Plan view ▸ Grid) draws the building grid at 2× density
+				// (half-size cells). Walls/rooms stay on the coarse building cell (gridPx),
+				// so keep the image + walls at gridPx but halve the Foundry grid so one
+				// small cell = one Foundry square (walls then fall on every other line) —
+				// matching what the generator displays.
+				const dwellGrid = dwellGridSize(gridPx, this._getDwellDoubleGrid());
 				const sceneW = Math.round(cellsW * gridPx);
 				const sceneH = Math.round(cellsH * gridPx);
 				const nodeToScene = (j, i) => ({ x: Math.round((j - mj) * gridPx), y: Math.round((i - mi) * gridPx) });
@@ -1230,10 +1300,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
 				const levelBg = (src) => ({ src, color: "#000000", tint: "#ffffff", alphaThreshold: 0 });
 				const fillTex = { anchorX: 0.5, anchorY: 0.5, offsetX: 0, offsetY: 0, fit: "fill", scaleX: 1, scaleY: 1, rotation: 0 };
+				const dwellDefaults = this._getSceneImportDefaults();
 				const sceneData = {
 					name: sceneName, width: sceneW, height: sceneH,
-					grid: { size: gridPx }, padding: 0, backgroundColor: "#000000",
-					fogExploration: true, tokenVision: true,
+					grid: { size: dwellGrid, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
+					fog: { mode: dwellDefaults.fogMode }, tokenVision: dwellDefaults.tokenVision,
 					background: { src: units[baseIdx].bg },
 					levels: units.map(u => ({ name: u.name, elevation: { bottom: u.bottom, top: u.top }, background: levelBg(u.bg), textures: fillTex })),
 				};
@@ -1738,6 +1809,27 @@ export class MaphubViewerApp extends ApplicationV2 {
 	}
 
 	/**
+	 * Per-generator Foundry scene defaults, chosen for the best out-of-the-box
+	 * import quality:
+	 *  - Battlemaps (Dungeon, Cave, Dwellings) → SQUARE grid + fog/vision. Their
+	 *    cells already map 1:1 to Foundry squares (the importer rescales/aligns
+	 *    them), so tokens, rulers, and play work immediately.
+	 *  - Overview maps (Realm/Perilous Shores, City/MFCG, Village) → GRIDLESS,
+	 *    fully revealed (no fog/vision). These are region/settlement backdrops
+	 *    usually shown as handouts; a square grid just clutters them and fog
+	 *    hides a map that's meant to be seen whole.
+	 * @returns {{ gridType: number, fogMode: number, tokenVision: boolean }}
+	 */
+	_getSceneImportDefaults() {
+		const T = CONST.GRID_TYPES;
+		const F = CONST.FOG_EXPLORATION_MODES;   // { DISABLED: 0, INDIVIDUAL: 1, SHARED: 2 }
+		const isOverview = ["realm", "mfcg", "village"].includes(this._mapType);
+		return isOverview
+			? { gridType: T.GRIDLESS, fogMode: F.DISABLED,   tokenVision: false }
+			: { gridType: T.SQUARE,   fogMode: F.INDIVIDUAL, tokenVision: true };
+	}
+
+	/**
 	 * Clamp a generator's rendered cell size (px) to a usable Foundry grid.size.
 	 * Generators render cells at whatever pixel size their own grid setting yields,
 	 * which can be tiny (Cave "Square grid > Size", Dungeon "Small tiles"). Using
@@ -1746,8 +1838,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 * one Foundry square at a sensible size. Matches the Dwelling grid clamp range.
 	 */
 	_normalizeGridPx(cellPx) {
-		const px = Math.round(Number(cellPx) || 0);
-		return Math.max(64, Math.min(160, px || 64));
+		return normalizeGridPx(cellPx);
 	}
 
 	/**
@@ -1784,6 +1875,26 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 */
 	async _exportCurrentDungeonJson() {
 		try {
+			// Preferred path: read the JSON straight from the live controller.
+			// `dungeon.getData()` returns the very same { version, title, story, rects,
+			// doors, notes, columns, water } structure the 'J' export writes — but
+			// synchronously, with no saveAs/download — so it works reliably even while
+			// the window is detached (the synthetic keypress below is flaky when
+			// detached). This is what lets the dungeon import live, preserving edits.
+			const liveDungeon = this._getDungeonController()?.dungeon;
+			if (liveDungeon && typeof liveDungeon.getData === "function") {
+				try {
+					const data = JSON.parse(JSON.stringify(liveDungeon.getData()));
+					if (data && Array.isArray(data.rects) && data.rects.length) {
+						this._lastSavedDungeonJson = data;
+						this._lastSavedDungeonJsonAt = Date.now();
+						return true;
+					}
+				} catch (e) {
+					console.warn(`${MODULE_ID} | direct dungeon getData() failed; falling back to key export`, e);
+				}
+			}
+
 			const cw = this._iframe?.contentWindow;
 			const doc = this._iframe?.contentDocument;
 			if (!cw || !doc) return false;
@@ -1791,17 +1902,23 @@ export class MaphubViewerApp extends ApplicationV2 {
 			this._lastSavedDungeonJson = null;
 			this._lastSavedDungeonJsonAt = 0;
 
-			const keyEvent = new cw.KeyboardEvent("keydown", {
-				key: "j", code: "KeyJ", keyCode: 74, which: 74,
-				bubbles: true, cancelable: true
-			});
-			doc.body?.dispatchEvent(keyEvent);
-			doc.dispatchEvent(keyEvent);
-
-			// Poll for saveAs hook to deliver the JSON (up to 5 s)
-			for (let i = 0; i < 50; i++) {
+			// Fallback: the generator exports JSON on the 'J' key. A single synthetic keydown is
+			// unreliable while the window is detached (it doesn't always reach the
+			// generator's key handler), so dispatch to window + document + body and
+			// RE-dispatch periodically while polling.
+			const fire = () => {
+				const ev = new cw.KeyboardEvent("keydown", { key: "j", code: "KeyJ", keyCode: 74, which: 74, bubbles: true, cancelable: true });
+				try { cw.dispatchEvent(ev); } catch (_) {}
+				try { doc.dispatchEvent(ev); } catch (_) {}
+				try { doc.body?.dispatchEvent(ev); } catch (_) {}
+			};
+			fire();
+			// Poll up to ~8 s for the saveAs hook to deliver the JSON, re-firing the
+			// key roughly every second until it lands.
+			for (let i = 0; i < 80; i++) {
 				await new Promise(r => setTimeout(r, 100));
 				if (this._lastSavedDungeonJson) return true;
+				if (i > 0 && i % 10 === 0) fire();
 			}
 			return false;
 		} catch (err) {
@@ -1821,6 +1938,78 @@ export class MaphubViewerApp extends ApplicationV2 {
 			return this._iframe?.contentWindow?.__sdxDungeonView ?? null;
 		} catch (_) {
 			return null;
+		}
+	}
+
+	/**
+	 * The dungeon's current grid scale: 1 = normal, 2 = "Small tiles" (Layers ▸ Grid ▸
+	 * Small Tiles → half-size cells, 2× density, 4 tiles per normal cell). The live
+	 * scale lives in a closure-private static, so read it from the generator's persisted
+	 * state (`com.watabou.dungeon`, keyed by the iframe's blob URL); absent ⇒ default 1.
+	 * Used so the imported Foundry grid matches the displayed grid density.
+	 */
+	_getDungeonGridScale() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const uuid = (this._iframe?.src || "").split("/").pop();
+			if (!cw?.localStorage || !uuid) return 1;
+			for (let i = 0; i < cw.localStorage.length; i++) {
+				const k = cw.localStorage.key(i);
+				if (k && k.includes(uuid) && k.includes("com.watabou.dungeon")) {
+					return parseDungeonGridScale(cw.localStorage.getItem(k));
+				}
+			}
+			return 1;   // not persisted → default
+		} catch (e) { return 1; }
+	}
+
+	/**
+	 * Whether the Dwellings generator's "Double grid" is on (2× grid density — the
+	 * building grid drawn at half-size cells, like the dungeon's Small Tiles). Read
+	 * from the generator's persisted state (`com.watabou.house`, keyed by the iframe's
+	 * blob URL); absent ⇒ off. Used so the imported Foundry grid matches the display.
+	 */
+	_getDwellDoubleGrid() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const uuid = (this._iframe?.src || "").split("/").pop();
+			if (!cw?.localStorage || !uuid) return false;
+			for (let i = 0; i < cw.localStorage.length; i++) {
+				const k = cw.localStorage.key(i);
+				if (k && k.includes(uuid) && k.includes("com.watabou.house")) {
+					return parseDwellDoubleGrid(cw.localStorage.getItem(k));
+				}
+			}
+			return false;   // not persisted → off
+		} catch (e) { return false; }
+	}
+
+	/**
+	 * Force the Dwellings "Double grid" on (2× density — half-size cells) so a dwelling
+	 * displays and imports with the finer grid by default. Mirrors the realm flat-top
+	 * default. Toggles only when it's currently off; the import reads the live/persisted
+	 * state, so a user who turns it back off is respected.
+	 */
+	async _forceDwellDoubleGrid() {
+		try {
+			const dv = this._iframe?.contentWindow?.__sdxDwellView;
+			if (!dv || typeof dv.toggleDoubleGrid !== "function") return false;
+			if (this._getDwellDoubleGrid()) return true;     // already on
+			try { dv.toggleDoubleGrid(); } catch (_) { }
+			await new Promise(r => setTimeout(r, 400));       // let it redraw + persist
+			return this._getDwellDoubleGrid();
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to force dwelling double-grid`, err);
+			return false;
+		}
+	}
+
+	/** Poll until the dwellings generator is live, then default "Double grid" on. */
+	async _forceDwellDoubleGridWhenReady() {
+		for (let i = 0; i < 30; i++) {
+			const dv = this._iframe?.contentWindow?.__sdxDwellView;
+			if (dv && typeof dv.toggleDoubleGrid === "function") { await this._forceDwellDoubleGrid(); return; }
+			await new Promise(r => setTimeout(r, 400));
 		}
 	}
 
@@ -1917,7 +2106,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 					y: Math.round(M.b * lx + M.d * ly + M.ty),
 				};
 			};
-			const cellPx = cell * Math.hypot(M.a, M.b);
+			// `cell`/`toPixel` stay in LOGICAL dungeon cells (wall + rect coords). The
+			// grid SIZE, though, must follow the displayed grid: "Small tiles"
+			// (gridScale 2) draws cells at 30/gridScale — 2× density — so one Foundry
+			// square should be one *small* tile. Walls sit on logical-cell boundaries,
+			// so they land on every gridScale-th line; the image rescale keeps it exact.
+			const gridScale = this._getDungeonGridScale();
+			const cellPx = dungeonCellPx(cell, gridScale, Math.hypot(M.a, M.b));
 			return { toPixel, cellPx };
 		} catch (err) {
 			console.warn(`${MODULE_ID} | Failed to read dungeon render transform`, err);
@@ -1958,6 +2153,97 @@ export class MaphubViewerApp extends ApplicationV2 {
 		} catch (err) {
 			console.warn(`${MODULE_ID} | Failed to read cave align source`, err);
 			return null;
+		}
+	}
+
+	/**
+	 * Render mapping for a Realm (Perilous Shores) import. A realm is a regular
+	 * flat/pointy hex lattice (when the hex tilt is flat/pointy — not warped). The
+	 * model reports its offset layout (odd-r/even-r/odd-q/even-q), which maps 1:1 to
+	 * a Foundry hex grid type. Returns that type, the hex radius (model units), the
+	 * model→backing-px scale + transform, a representative hex centre (for the phase
+	 * offset), and the flat/even flags — or null when the map is warped (no regular
+	 * lattice) or the live model isn't reachable.
+	 * @returns {{ gridType:number, R:number, sImg:number, toPixel:(x:number,y:number)=>{x:number,y:number}, sampleCenter:{x:number,y:number}, isFlat:boolean, isEven:boolean }|null}
+	 */
+	_getRealmAlignSource() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const C = cw?.__maphubClasses;
+			const inst = C?.["com.watabou.perilous.MapScene"]?.inst;
+			const RegionCls = C?.["com.watabou.perilous.model.Region"];
+			const Point = C?.["openfl.geom.Point"];
+			const region = inst?.region, view = inst?.view;
+			if (!inst || !region || !view || !RegionCls || !Point) return null;
+			if (Number(RegionCls.tiltMode) === 0) return null;   // warped hexes — no regular lattice; fall back to gridless
+
+			const layout = this._extractRealmData()?.layout;   // odd-r | even-r | odd-q | even-q
+			const T = CONST.GRID_TYPES;
+			const gridType = { "odd-r": T.HEXODDR, "even-r": T.HEXEVENR, "odd-q": T.HEXODDQ, "even-q": T.HEXEVENQ }[layout];
+			if (gridType == null) return null;                  // warped/unknown — not hex-alignable
+
+			const R = Number(RegionCls.hexRadius);
+			if (!(R > 0)) return null;
+
+			// The captured PNG is the canvas BACKING store (× devicePixelRatio); the
+			// view's localToGlobal is in CSS/stage px, so scale by dpr to match.
+			const cnv = this._iframe?.contentDocument?.querySelector("canvas");
+			const dpr = (cnv && cnv.clientWidth > 0) ? (cnv.width / cnv.clientWidth) : (cw.devicePixelRatio || 1);
+			const toPixel = (mx, my) => { const p = view.localToGlobal(new Point(mx, my)); return { x: p.x * dpr, y: p.y * dpr }; };
+
+			const o = toPixel(0, 0), ux = toPixel(1000, 0);
+			const sImg = (ux.x - o.x) / 1000;
+			if (!(sImg > 0)) return null;
+
+			// representative hex centre nearest the model origin (for the 2D phase offset)
+			let best = null, bd = Infinity;
+			const faces = region.dcel?.faces || [];
+			for (let k = 0; k < faces.length; k++) {
+				const c = faces[k]?.data?.center;
+				if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) { const d = c.x * c.x + c.y * c.y; if (d < bd) { bd = d; best = c; } }
+			}
+			if (!best) return null;
+
+			return {
+				gridType, R, sImg, toPixel,
+				sampleCenter: { x: best.x, y: best.y },
+				isFlat: layout.endsWith("q"), isEven: layout.startsWith("even"),
+			};
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to read realm align source`, err);
+			return null;
+		}
+	}
+
+	/**
+	 * Force the Perilous Shores generator into flat-topped hexes (tilt mode 2) so a
+	 * realm imports as a Foundry flat-top hex grid. setTilt persists the choice
+	 * (State.set) and re-tilts the CURRENT map without changing its content; its
+	 * URL-persist step can throw on a blob: URL, which is harmless (the tilt still
+	 * applies), so it's swallowed. Returns true when the map is flat-topped.
+	 */
+	async _forceRealmFlatTop() {
+		try {
+			const C = this._iframe?.contentWindow?.__maphubClasses;
+			const inst = C?.["com.watabou.perilous.MapScene"]?.inst;
+			const RegionCls = C?.["com.watabou.perilous.model.Region"];
+			if (!inst || typeof inst.setTilt !== "function") return false;
+			if (Number(RegionCls?.tiltMode) === 2) return true;         // already flat-top
+			try { inst.setTilt(2); } catch (_) { /* URL-persist may throw; tilt still applies */ }
+			await new Promise(r => setTimeout(r, 600));                 // let the re-tilt redraw settle
+			return Number(RegionCls?.tiltMode) === 2;
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to force realm flat-top`, err);
+			return false;
+		}
+	}
+
+	/** Poll until the realm generator is live, then force flat-topped hexes (for display). */
+	async _forceRealmFlatTopWhenReady() {
+		for (let i = 0; i < 30; i++) {
+			const inst = this._iframe?.contentWindow?.__maphubClasses?.["com.watabou.perilous.MapScene"]?.inst;
+			if (inst?.region && typeof inst.setTilt === "function") { await this._forceRealmFlatTop(); return; }
+			await new Promise(r => setTimeout(r, 400));
 		}
 	}
 
@@ -2006,7 +2292,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 		}
 	}
 
-	async _createImageScene({ name, img, grid, width = null, height = null }) {
+	async _createImageScene({ name, img, grid, width = null, height = null, gridType = null }) {
 		let w = width, h = height;
 		if (!(w > 0) || !(h > 0)) {
 			const loader = new foundry.canvas.TextureLoader();
@@ -2017,16 +2303,17 @@ export class MaphubViewerApp extends ApplicationV2 {
 			if (!(texture?.width > 0) || !(texture?.height > 0)) throw new Error("Could not read the map image dimensions.");
 			w = texture.width; h = texture.height;
 		}
+		const defaults = this._getSceneImportDefaults();
 		const sceneData = {
 			name,
-			grid: { size: grid },
+			grid: { size: grid, type: gridType ?? defaults.gridType },
 			width: w,
 			height: h,
 			padding: 0,
 			shiftX: 0,
 			shiftY: 0,
-			fogExploration: true,
-			tokenVision: true,
+			fog: { mode: defaults.fogMode },
+			tokenVision: defaults.tokenVision,
 		};
 		if (this._importContext?.folderId) sceneData.folder = this._importContext.folderId;
 
@@ -2048,6 +2335,16 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 * to ensure the internal map canvas redraws at high resolution.
 	 * @returns {Promise<{ position: object, style: object }>} The previous window state.
 	 */
+	/**
+	 * True when the generator's <canvas> is reachable from this document (so the map can
+	 * be captured/read). It stays reachable while the window is detached, which lets the
+	 * import skip the destructive dock-back rebuild in the normal case.
+	 */
+	_isMapCanvasReadable() {
+		try { return (this._iframe?.contentDocument?.querySelector("canvas")?.width || 0) > 0; }
+		catch (e) { return false; }   // cross-origin / inaccessible
+	}
+
 	async _maximizeForCapture() {
 		ui.notifications.info("Preparing map for high-res capture...");
 

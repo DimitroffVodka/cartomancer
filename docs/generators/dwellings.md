@@ -300,6 +300,22 @@ Because every building is defined by its **seed** plus tags, the URL in your bro
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+A dwelling is a tactical building interior, imported on a grid — and uniquely, **multi-floor**.
+
+**What Cartomancer sets automatically**
+- A **square-grid** scene where one building cell = one Foundry square, aligned to the origin.
+- **Every floor** becomes a named Foundry **Level** with its own background image, **per-level walls + doors**, and **stair regions** that link the floors (a single staircase serving 3+ levels gives one up/down chooser, not stacked prompts).
+- Fog and token-vision are left **on** for play.
+
+**Set these in the generator before *Import Scene***
+- Configure size/floors first via **Parameters…** (`Tab`) — e.g. `tall`, `basement`. All floors present are captured.
+- Stay in **Plan view** (the default). The importer reads the plan, not the elevation view.
+- In **Style…**, a readable preset (**Natural** / **Plain**) imports best; the Foundry grid is added regardless of the in-drawing grid opacity.
+
+---
+
 ## Tips & tricks
 
 - **Roll fast, then refine.** Hammer **Enter** to cycle through buildings, and only open Parameters once you know roughly what you want (e.g. add `tall` + `basement` for a tower with a cellar).

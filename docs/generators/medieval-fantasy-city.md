@@ -304,6 +304,21 @@ These overlay choices are saved in your browser, so they persist between session
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+A city map is an overview/handout, not a tactical grid, so Cartomancer imports it differently from the battlemap generators.
+
+**What Cartomancer sets automatically**
+- A **gridless** scene (no square grid overlaid on the city), **fully revealed** — fog-of-war and token-vision are turned **off** so the whole city is visible as a handout.
+
+**Set these in the generator before *Import Scene***
+- Frame the **whole city** in view at a good zoom before importing — Cartomancer captures at high resolution, but what's framed is what's captured.
+- **Style → Elements**: keep **Scale bar**, **Compass**, and **Grid** (`D`) **off** (they're off by default) so nothing overlays the handout. Keep **Title** on or off to taste.
+- Pick a **Color scheme** (`1`–`6`) you like; **Buildings ▸ Display mode → Lots** or **Complex** gives the most detailed, handout-quality city.
+- If you want the sharpest possible result, export **SVG** from the generator and rasterize it large, then use that image — see [Export & sharing](#export--sharing).
+
+---
+
 ## Tips & tricks
 
 - **Press `Enter` to reroll the whole city.** It is the fastest way to spin through options until something catches your eye.
