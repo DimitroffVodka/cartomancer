@@ -5,8 +5,8 @@ const FilePicker = foundry.applications.apps.FilePicker?.implementation ?? globa
  * MaphubViewerApp.mjs
  * ApplicationV2 window that displays a settlement map in an iframe.
  * The iframe is created entirely via DOM (not via HTML string / innerHTML) so
- * that sandbox="allow-same-origin" is never stripped by FoundryVTT's journal
- * HTML sanitizer.
+ * the parent can wire load handlers and read into the same-origin frame without
+ * FoundryVTT's journal HTML sanitizer stripping attributes.
  *
  * For local maphub: serves index.html directly from the module's static path.
  * express.static does NOT add X-Frame-Options, so the iframe loads fine.
@@ -94,8 +94,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 	/**
 	 * After the container div is in the DOM, build the src and inject the
-	 * iframe entirely via DOM — iframe.sandbox is a DOMTokenList, so values
-	 * set here are NEVER passed through FoundryVTT's HTML sanitizer.
+	 * iframe entirely via DOM so we can wire load handlers and read into the
+	 * same-origin frame without FoundryVTT's HTML sanitizer interfering.
 	 */
 	async _onRender(_context, _options) {
 		window.addEventListener("message", this._onMessage);
@@ -149,12 +149,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 		const iframe = document.createElement("iframe");
 		iframe.style.cssText = "width:100%;height:100%;border:none;display:block;";
 		iframe.title = "Settlement Map";
-		// DOMTokenList — bypasses all string-based sanitization
-		iframe.sandbox.add("allow-scripts");
-		iframe.sandbox.add("allow-same-origin");
-		iframe.sandbox.add("allow-forms");
-		iframe.sandbox.add("allow-popups");
-		iframe.sandbox.add("allow-downloads");
+		// No sandbox attribute: the framed content is the module's own first-party
+		// generator, and the parent must read into it same-origin (contentDocument,
+		// contentWindow, shared localStorage). allow-scripts + allow-same-origin
+		// together neuter the sandbox anyway and only trip Chrome's "can escape its
+		// sandboxing" warning, so we omit it entirely (matches MaphubSD's iframe).
 
 		if (loadedJsonText) {
 			iframe.onload = () => {
@@ -200,6 +199,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 
 		container.replaceChildren(iframe);
 		this._iframe = iframe;
+
+		// Realm (Perilous Shores): default to flat-topped hexes so the map displays —
+		// and imports as — a Foundry-friendly flat-top hex grid.
+		if (this._mapType === "realm") this._forceRealmFlatTopWhenReady();
 
 		this._maybeAutoDetach();
 	}
@@ -856,6 +859,9 @@ export class MaphubViewerApp extends ApplicationV2 {
 		const isCave = this._mapType === "cave";
 		const isDungeon = this._mapType === "dungeon";
 		const isRealm = this._mapType === "realm";
+		// Realm flat-top is defaulted on load (_forceRealmFlatTopWhenReady); we do NOT
+		// re-force it here, so a user who deliberately switched to Pointy is respected —
+		// the import follows whatever hex orientation the map currently has.
 
 		// Realm: offer to also create cross-linked journals for the linked
 		// cities/villages/dungeons (each map generates on demand). Extract the realm
@@ -933,6 +939,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 			// scale+crop to any captured-canvas pixel.
 			let mapPx = (x, y) => ({ x: Math.round(x), y: Math.round(y) });
 			let align = null;
+			let realmAlign = null;
+			let realmGridType = null;
 			let dungeonToPixel = null;
 			let caveDpr = 1;
 			if (isDungeon) {
@@ -958,6 +966,8 @@ export class MaphubViewerApp extends ApplicationV2 {
 					caveDpr = (cc && cc.clientWidth > 0) ? (cc.width / cc.clientWidth) : (this._iframe?.contentWindow?.devicePixelRatio || 1);
 					align = { toPixel: ca.toPixel, cellPx: ca.cellPx * caveDpr, origin: { x: ca.origin.x * caveDpr, y: ca.origin.y * caveDpr } };
 				}
+			} else if (isRealm) {
+				realmAlign = this._getRealmAlignSource();
 			}
 
 			if (align && align.cellPx > 0) {
@@ -976,9 +986,30 @@ export class MaphubViewerApp extends ApplicationV2 {
 				importImg = aligned.path; importW = aligned.width; importH = aligned.height;
 				grid = gridPx;
 				mapPx = (x, y) => ({ x: Math.round(x * f - shiftX), y: Math.round(y * f - shiftY) });
+			} else if (realmAlign) {
+				// Realm (Perilous Shores): a regular flat/pointy hex lattice. Both the
+				// generator and Foundry draw regular hexagons, so matching the row pitch
+				// matches the whole lattice — only a 2D phase offset remains, applied with
+				// the same scale+crop as the square path. grid.size is set to match the
+				// native hex pitch (rounded to an integer; the image is rescaled by f to
+				// keep the match exact), and the phase is computed against Foundry's own
+				// HexagonalGrid so it's correct for the exact hex type.
+				const { gridType, R, sImg, toPixel, sampleCenter, isFlat, isEven } = realmAlign;
+				const nativeS = Math.sqrt(3) * R * sImg;                 // Foundry grid.size matching native pitch
+				const gridPx = Math.max(60, Math.min(200, Math.round(nativeS)));
+				const f = gridPx / nativeS;                              // rescale image so pitch == integer gridPx
+				const fg = new foundry.grid.HexagonalGrid({ size: gridPx, columns: isFlat, even: isEven });
+				const G = toPixel(sampleCenter.x, sampleCenter.y);
+				const Gs = { x: G.x * f, y: G.y * f };
+				const Fc = fg.getCenterPoint(fg.getOffset({ x: Gs.x, y: Gs.y }));
+				const shiftX = Gs.x - Fc.x, shiftY = Gs.y - Fc.y;
+				const aligned = await this._renderAlignedImage(imgPath, f, shiftX, shiftY);
+				importImg = aligned.path; importW = aligned.width; importH = aligned.height;
+				grid = gridPx;
+				realmGridType = gridType;
 			}
 
-			let scene = await this._createImageScene({ name: sceneName, img: importImg, grid, width: importW, height: importH });
+			let scene = await this._createImageScene({ name: sceneName, img: importImg, grid, width: importW, height: importH, gridType: realmGridType });
 
 			if (isDungeon) {
 				try {
@@ -1230,10 +1261,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
 				const levelBg = (src) => ({ src, color: "#000000", tint: "#ffffff", alphaThreshold: 0 });
 				const fillTex = { anchorX: 0.5, anchorY: 0.5, offsetX: 0, offsetY: 0, fit: "fill", scaleX: 1, scaleY: 1, rotation: 0 };
+				const dwellDefaults = this._getSceneImportDefaults();
 				const sceneData = {
 					name: sceneName, width: sceneW, height: sceneH,
-					grid: { size: gridPx }, padding: 0, backgroundColor: "#000000",
-					fogExploration: true, tokenVision: true,
+					grid: { size: gridPx, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
+					fog: { mode: dwellDefaults.fogMode }, tokenVision: dwellDefaults.tokenVision,
 					background: { src: units[baseIdx].bg },
 					levels: units.map(u => ({ name: u.name, elevation: { bottom: u.bottom, top: u.top }, background: levelBg(u.bg), textures: fillTex })),
 				};
@@ -1738,6 +1770,27 @@ export class MaphubViewerApp extends ApplicationV2 {
 	}
 
 	/**
+	 * Per-generator Foundry scene defaults, chosen for the best out-of-the-box
+	 * import quality:
+	 *  - Battlemaps (Dungeon, Cave, Dwellings) → SQUARE grid + fog/vision. Their
+	 *    cells already map 1:1 to Foundry squares (the importer rescales/aligns
+	 *    them), so tokens, rulers, and play work immediately.
+	 *  - Overview maps (Realm/Perilous Shores, City/MFCG, Village) → GRIDLESS,
+	 *    fully revealed (no fog/vision). These are region/settlement backdrops
+	 *    usually shown as handouts; a square grid just clutters them and fog
+	 *    hides a map that's meant to be seen whole.
+	 * @returns {{ gridType: number, fogMode: number, tokenVision: boolean }}
+	 */
+	_getSceneImportDefaults() {
+		const T = CONST.GRID_TYPES;
+		const F = CONST.FOG_EXPLORATION_MODES;   // { DISABLED: 0, INDIVIDUAL: 1, SHARED: 2 }
+		const isOverview = ["realm", "mfcg", "village"].includes(this._mapType);
+		return isOverview
+			? { gridType: T.GRIDLESS, fogMode: F.DISABLED,   tokenVision: false }
+			: { gridType: T.SQUARE,   fogMode: F.INDIVIDUAL, tokenVision: true };
+	}
+
+	/**
 	 * Clamp a generator's rendered cell size (px) to a usable Foundry grid.size.
 	 * Generators render cells at whatever pixel size their own grid setting yields,
 	 * which can be tiny (Cave "Square grid > Size", Dungeon "Small tiles"). Using
@@ -1962,6 +2015,97 @@ export class MaphubViewerApp extends ApplicationV2 {
 	}
 
 	/**
+	 * Render mapping for a Realm (Perilous Shores) import. A realm is a regular
+	 * flat/pointy hex lattice (when the hex tilt is flat/pointy — not warped). The
+	 * model reports its offset layout (odd-r/even-r/odd-q/even-q), which maps 1:1 to
+	 * a Foundry hex grid type. Returns that type, the hex radius (model units), the
+	 * model→backing-px scale + transform, a representative hex centre (for the phase
+	 * offset), and the flat/even flags — or null when the map is warped (no regular
+	 * lattice) or the live model isn't reachable.
+	 * @returns {{ gridType:number, R:number, sImg:number, toPixel:(x:number,y:number)=>{x:number,y:number}, sampleCenter:{x:number,y:number}, isFlat:boolean, isEven:boolean }|null}
+	 */
+	_getRealmAlignSource() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const C = cw?.__maphubClasses;
+			const inst = C?.["com.watabou.perilous.MapScene"]?.inst;
+			const RegionCls = C?.["com.watabou.perilous.model.Region"];
+			const Point = C?.["openfl.geom.Point"];
+			const region = inst?.region, view = inst?.view;
+			if (!inst || !region || !view || !RegionCls || !Point) return null;
+			if (Number(RegionCls.tiltMode) === 0) return null;   // warped hexes — no regular lattice; fall back to gridless
+
+			const layout = this._extractRealmData()?.layout;   // odd-r | even-r | odd-q | even-q
+			const T = CONST.GRID_TYPES;
+			const gridType = { "odd-r": T.HEXODDR, "even-r": T.HEXEVENR, "odd-q": T.HEXODDQ, "even-q": T.HEXEVENQ }[layout];
+			if (gridType == null) return null;                  // warped/unknown — not hex-alignable
+
+			const R = Number(RegionCls.hexRadius);
+			if (!(R > 0)) return null;
+
+			// The captured PNG is the canvas BACKING store (× devicePixelRatio); the
+			// view's localToGlobal is in CSS/stage px, so scale by dpr to match.
+			const cnv = this._iframe?.contentDocument?.querySelector("canvas");
+			const dpr = (cnv && cnv.clientWidth > 0) ? (cnv.width / cnv.clientWidth) : (cw.devicePixelRatio || 1);
+			const toPixel = (mx, my) => { const p = view.localToGlobal(new Point(mx, my)); return { x: p.x * dpr, y: p.y * dpr }; };
+
+			const o = toPixel(0, 0), ux = toPixel(1000, 0);
+			const sImg = (ux.x - o.x) / 1000;
+			if (!(sImg > 0)) return null;
+
+			// representative hex centre nearest the model origin (for the 2D phase offset)
+			let best = null, bd = Infinity;
+			const faces = region.dcel?.faces || [];
+			for (let k = 0; k < faces.length; k++) {
+				const c = faces[k]?.data?.center;
+				if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) { const d = c.x * c.x + c.y * c.y; if (d < bd) { bd = d; best = c; } }
+			}
+			if (!best) return null;
+
+			return {
+				gridType, R, sImg, toPixel,
+				sampleCenter: { x: best.x, y: best.y },
+				isFlat: layout.endsWith("q"), isEven: layout.startsWith("even"),
+			};
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to read realm align source`, err);
+			return null;
+		}
+	}
+
+	/**
+	 * Force the Perilous Shores generator into flat-topped hexes (tilt mode 2) so a
+	 * realm imports as a Foundry flat-top hex grid. setTilt persists the choice
+	 * (State.set) and re-tilts the CURRENT map without changing its content; its
+	 * URL-persist step can throw on a blob: URL, which is harmless (the tilt still
+	 * applies), so it's swallowed. Returns true when the map is flat-topped.
+	 */
+	async _forceRealmFlatTop() {
+		try {
+			const C = this._iframe?.contentWindow?.__maphubClasses;
+			const inst = C?.["com.watabou.perilous.MapScene"]?.inst;
+			const RegionCls = C?.["com.watabou.perilous.model.Region"];
+			if (!inst || typeof inst.setTilt !== "function") return false;
+			if (Number(RegionCls?.tiltMode) === 2) return true;         // already flat-top
+			try { inst.setTilt(2); } catch (_) { /* URL-persist may throw; tilt still applies */ }
+			await new Promise(r => setTimeout(r, 600));                 // let the re-tilt redraw settle
+			return Number(RegionCls?.tiltMode) === 2;
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to force realm flat-top`, err);
+			return false;
+		}
+	}
+
+	/** Poll until the realm generator is live, then force flat-topped hexes (for display). */
+	async _forceRealmFlatTopWhenReady() {
+		for (let i = 0; i < 30; i++) {
+			const inst = this._iframe?.contentWindow?.__maphubClasses?.["com.watabou.perilous.MapScene"]?.inst;
+			if (inst?.region && typeof inst.setTilt === "function") { await this._forceRealmFlatTop(); return; }
+			await new Promise(r => setTimeout(r, 400));
+		}
+	}
+
+	/**
 	 * Produce a grid-aligned copy of the captured map: scale the source by `scale`
 	 * (so one cell becomes an exact integer of pixels) and shift it up-left by
 	 * (shiftX, shiftY) (so the generator's cell-zero edge lands on (0,0)). The
@@ -2006,7 +2150,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 		}
 	}
 
-	async _createImageScene({ name, img, grid, width = null, height = null }) {
+	async _createImageScene({ name, img, grid, width = null, height = null, gridType = null }) {
 		let w = width, h = height;
 		if (!(w > 0) || !(h > 0)) {
 			const loader = new foundry.canvas.TextureLoader();
@@ -2017,16 +2161,17 @@ export class MaphubViewerApp extends ApplicationV2 {
 			if (!(texture?.width > 0) || !(texture?.height > 0)) throw new Error("Could not read the map image dimensions.");
 			w = texture.width; h = texture.height;
 		}
+		const defaults = this._getSceneImportDefaults();
 		const sceneData = {
 			name,
-			grid: { size: grid },
+			grid: { size: grid, type: gridType ?? defaults.gridType },
 			width: w,
 			height: h,
 			padding: 0,
 			shiftX: 0,
 			shiftY: 0,
-			fogExploration: true,
-			tokenVision: true,
+			fog: { mode: defaults.fogMode },
+			tokenVision: defaults.tokenVision,
 		};
 		if (this._importContext?.folderId) sceneData.folder = this._importContext.folderId;
 

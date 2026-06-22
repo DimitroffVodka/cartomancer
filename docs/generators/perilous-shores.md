@@ -382,6 +382,24 @@ When you Submit, the region type tag (island / coast / lake / land) is **auto-de
 
 ---
 
+## Recommended settings for Foundry import (Cartomancer)
+
+A Perilous Shores realm is a region/world map — and Cartomancer imports it as a **flat-top hex grid**, ready for hexcrawling.
+
+**What Cartomancer sets automatically**
+- **Forces flat-topped hexes** in the generator, so the map you see and import is a regular hex lattice (Warped hexes can't align to a VTT grid).
+- Imports as a Foundry **flat-top hex scene** (`HEXODDQ`) **aligned to the drawn hexes**: the importer reads the generator's hex radius and render transform, matches Foundry's `grid.size` to the native hex pitch, and phase-aligns the lattice so **one Foundry hex = one map hex**.
+- **Fully revealed** — fog-of-war and token-vision are off, so the whole region shows as a handout.
+
+**Set these in the generator before *Import Scene***
+- For resolution, set a large **Size preset** in **Parameters…** before generating — **Large (1800)** or **Huge (2700)**. A bigger map captures sharper.
+- You don't need to touch the hex mode — Cartomancer sets flat-top for you. (Switch to **Pointy topped** and the import follows it with a pointy Foundry hex grid; **Warped** falls back to a plain gridless image.)
+- Trim clutter to taste: **Labels**, and under **Elements** the **Descriptions**, **Compass**, **Matte**, and **Clouds** overlays. A clean style preset (**Default**, **Antique**, **Soft**) imports well.
+- Turn on **hex numbers** (`N`) if you want the generator's coordinates baked into the image for referencing.
+- To import individual locations *as their own scenes*, use the realm's location journals (**Generate this map**) rather than capturing the whole region — see the module's realm-import flow.
+
+---
+
 ## Tips & tricks
 
 - **Shift-click tags to learn them.** The Parameters dialog has a built-in explanation for every tag — the fastest way to understand what each one does.
