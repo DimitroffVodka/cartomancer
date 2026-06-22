@@ -2,6 +2,18 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## 0.2.1 — 2026-06-21
+
+### Fixed
+- **Lean build on a fresh server**: generators no longer fall back to the (absent) bundled
+  loader. `bundleExists` now uses a reliable file listing instead of a HEAD request — some
+  servers answer HEAD `200` for missing files, which suppressed the first-use download
+  prompt and 404'd on `js/*.js`.
+- **Fonts** now load in fetch-on-first-use mode: the loader's `../../` relative paths are
+  rewritten to absolute module paths (they previously resolved wrong under the blob base).
+- Silenced the harmless `.json5` upload warning — Dwellings' style files are saved as
+  `.txt` directly (and the JS manifest is repointed) instead of attempting a rejected upload.
+
 ## 0.2.0 — 2026-06-21
 
 ### Added

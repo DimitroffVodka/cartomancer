@@ -150,7 +150,17 @@ export class GeneratorFetcher {
 	static async bundleExists(type) {
 		const rel = this._bundledJs[type];
 		if (!rel) return false;
-		try { const r = await fetch(`/modules/${MODULE_ID}/scripts/maphub/${rel}`, { method: "HEAD" }); return r.ok; } catch { return false; }
+		// Use FilePicker's real file listing, NOT fetch HEAD: some servers answer HEAD
+		// 200 for missing files, which would falsely report a bundle present on the lean
+		// build and skip the first-use download.
+		const parts = `scripts/maphub/${rel}`.split("/");
+		const file = parts.pop();
+		const dir = `modules/${MODULE_ID}/${parts.join("/")}`;
+		try {
+			const FP = FilePickerImpl();
+			const r = await FP.browse("data", dir);
+			return (r.files || []).some((f) => f.split("/").pop() === file);
+		} catch { return false; }
 	}
 
 	/**
@@ -227,7 +237,7 @@ export class GeneratorFetcher {
 				const res = await fetch(`${live}/${m.assetDir}/${a}`, { mode: "cors" });
 				if (!res.ok) { console.warn(`${MODULE_ID} | asset ${a} returned ${res.status}`); tick(a); continue; }
 				const blob = await res.blob();
-				if (await uploadFile(assetDir, a, blob, blob.type || "application/octet-stream")) {
+				const blocked = /\.json5$/i.test(a); if (!blocked && await uploadFile(assetDir, a, blob, blob.type || "application/octet-stream")) {
 					savedAssets.push(a);
 				} else {
 					const asTxt = `${a}.txt`;
@@ -279,6 +289,11 @@ export class GeneratorFetcher {
 
 		// our shipped loader
 		let html = await (await fetch(`/modules/${MODULE_ID}/scripts/maphub/${m.bundleDir}/index.html?cb=${this._cacheBust()}`)).text();
+
+		// The loader uses ../../ relative paths (js, fonts). Under the blob's <base href>
+		// those resolve wrong, so make them absolute to the shipped module files (the fonts
+		// ship with the lean build; the js gets inlined just below).
+		html = html.split("../../").join(`/modules/${MODULE_ID}/scripts/maphub/`);
 
 		// inline each fetched JS (.txt) in place of its <script src=...>
 		for (const j of m.js) {
