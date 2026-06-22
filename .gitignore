@@ -1,3 +1,9 @@
 node_modules/
 .DS_Store
 *.log
+
+# Playwright (dev-only e2e tooling)
+/test-results/
+/playwright-report/
+/blob-report/
+test/e2e/.auth/
