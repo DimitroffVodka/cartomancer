@@ -2,6 +2,18 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## 0.2.3 — 2026-06-21
+
+### Fixed
+- **Generator fonts in fetch mode**: every loader now uses the module's bundled fonts
+  (resolved to absolute paths) instead of per-generator asset fonts that weren't
+  downloaded — fixes the `ShareTech`/`ShareTechMono` 404s on the Dungeon and Dwellings
+  generators. Removed dead `Grenze`/`Neuton` `@font-face` refs (those fonts don't exist
+  on Watabou's site either).
+- **License-clean package**: the lean ZIP now also excludes the Dungeon's lowercase
+  `assets/` directory (Watabou data that 0.2.0–0.2.2 shipped by mistake) — the Dungeon's
+  data is fetched on first use like every other generator.
+
 ## 0.2.2 — 2026-06-21
 
 ### Fixed
