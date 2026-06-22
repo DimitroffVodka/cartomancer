@@ -840,15 +840,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 		if (!game.user.isGM) return;
 
 		// Capturing reads the iframe's live canvas + model, which works for every
-		// generator EXCEPT One Page Dungeon even while the window is detached — so we
-		// DON'T dock back (docking rebuilds the iframe from the seed/permalink, which
-		// regenerates the base map and destroys manual edits: renamed features, added
-		// towns, paintings, moved labels). One Page Dungeon is the exception: its wall
-		// export fires via a synthetic 'J' keypress that's unreliable while detached, so
-		// it docks back to import reliably. Its geometry is seed-deterministic (walls
-		// survive the rebuild); cosmetic edits don't — import while docked to keep them.
-		// (_canAttach() is true only when detached; capture also needs a reachable canvas.)
-		if (this._canAttach?.() && (this._mapType === "dungeon" || !this._isMapCanvasReadable())) {
+		// generator even while the window is detached (the dungeon's walls now come
+		// from dungeon.getData() directly — see _exportCurrentDungeonJson). So we DON'T
+		// dock back: docking rebuilds the iframe from the seed/permalink, which
+		// regenerates the base map and DESTROYS the user's manual edits (renamed
+		// features, added towns, paintings, moved labels). Only dock back if the canvas
+		// is genuinely unreachable. (_canAttach() is true only when detached.)
+		if (this._canAttach?.() && !this._isMapCanvasReadable()) {
 			ui.notifications.info("Docking the generator back so the map can be imported…");
 			try {
 				if (this._mapType === "realm") {
@@ -885,10 +883,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// Bb.exportJSON inside the generator which flows through our saveAs
 		// hook → _lastSavedDungeonJson.
 		if (isDungeon) {
-			// Dungeon is docked by the guard above, so the 'J'-key export fires reliably.
+			// Read the live (edited) dungeon JSON straight from the controller — works
+			// detached, so the dungeon imports without a rebuild and keeps edits.
 			const exported = await this._exportCurrentDungeonJson();
 			if (!exported) {
-				ui.notifications.warn("Could not export dungeon JSON. Make sure the One Page Dungeon generator is fully loaded before Import Scene.");
+				ui.notifications.warn("Could not read the dungeon data. Make sure the One Page Dungeon generator is fully loaded before Import Scene.");
 				return;
 			}
 		}
@@ -1843,6 +1842,26 @@ export class MaphubViewerApp extends ApplicationV2 {
 	 */
 	async _exportCurrentDungeonJson() {
 		try {
+			// Preferred path: read the JSON straight from the live controller.
+			// `dungeon.getData()` returns the very same { version, title, story, rects,
+			// doors, notes, columns, water } structure the 'J' export writes — but
+			// synchronously, with no saveAs/download — so it works reliably even while
+			// the window is detached (the synthetic keypress below is flaky when
+			// detached). This is what lets the dungeon import live, preserving edits.
+			const liveDungeon = this._getDungeonController()?.dungeon;
+			if (liveDungeon && typeof liveDungeon.getData === "function") {
+				try {
+					const data = JSON.parse(JSON.stringify(liveDungeon.getData()));
+					if (data && Array.isArray(data.rects) && data.rects.length) {
+						this._lastSavedDungeonJson = data;
+						this._lastSavedDungeonJsonAt = Date.now();
+						return true;
+					}
+				} catch (e) {
+					console.warn(`${MODULE_ID} | direct dungeon getData() failed; falling back to key export`, e);
+				}
+			}
+
 			const cw = this._iframe?.contentWindow;
 			const doc = this._iframe?.contentDocument;
 			if (!cw || !doc) return false;
@@ -1850,7 +1869,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			this._lastSavedDungeonJson = null;
 			this._lastSavedDungeonJsonAt = 0;
 
-			// The generator exports JSON on the 'J' key. A single synthetic keydown is
+			// Fallback: the generator exports JSON on the 'J' key. A single synthetic keydown is
 			// unreliable while the window is detached (it doesn't always reach the
 			// generator's key handler), so dispatch to window + document + body and
 			// RE-dispatch periodically while polling.
