@@ -2,35 +2,49 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
-## Unreleased
-
-### Changed
-- **Per-generator scene defaults on import**: battlemaps (One Page Dungeon, Cave / Glade,
-  Dwellings) now import with a **square** grid plus fog/token-vision for tactical play
-  (their cells already map 1:1 to Foundry squares); the settlement overview maps
-  (City / MFCG, Village) import **gridless** and **fully revealed** (no fog/token-vision),
-  since they're backdrops meant to be shown whole. Previously every imported scene
-  inherited the world's default grid type. *"Set as Background" on an existing scene is
-  unchanged — it respects the scene you already configured.*
+## 0.3.0 — 2026-06-22
 
 ### Added
-- **Perilous Shores → flat-top hex scenes.** Realm maps now import as a Foundry **flat-top
-  hex grid** (`HEXODDQ`) aligned to the generator's own hexes: Cartomancer forces flat-top
-  hexes in the generator, reads its hex radius + render transform, matches Foundry's
+- **Perilous Shores → flat-top hex scenes.** Realm maps import as a Foundry **flat-top
+  hex grid** (`HEXODDQ`) aligned to the generator's own hexes: Cartomancer defaults the
+  generator to flat-top hexes, reads its hex radius + render transform, matches Foundry's
   `grid.size` to the native hex pitch, and phase-aligns the lattice so **one Foundry hex =
-  one map hex**. Imported fully revealed (no fog/vision) for hexcrawling.
+  one map hex**. Imported fully revealed for hexcrawling. (Pointy-topped follows too;
+  warped is left gridless.)
+- **Dwellings default to "Double grid"** (2× density) when opened, and the import follows
+  it — one small cell per Foundry square, with walls on the coarse building lines. Turn it
+  off in the generator and the import respects that.
+- **Per-generator scene defaults on import**: battlemaps (One Page Dungeon, Cave / Glade,
+  Dwellings) import with a **square** grid + fog/token-vision for tactical play; the
+  settlement overviews (City / MFCG, Village) import **gridless** and **fully revealed**.
+  Previously every imported scene inherited the world's default grid type. *"Set as
+  Background" on an existing scene is unchanged.*
 - **Wiki**: every generator guide gained a *Recommended settings for Foundry import*
-  section — what Cartomancer sets automatically, plus the in-generator menu settings
-  that capture cleanly.
+  section — what Cartomancer sets automatically, plus the in-generator menu settings that
+  capture cleanly.
+- **Test suite**: a zero-dependency `node:test` suite for the grid/parse helpers and the
+  generator import-contract, an in-client Quench batch, and a Playwright harness covering
+  the dwelling hidden-window regression.
 
 ### Fixed
+- **Imports preserve your manual edits.** Importing no longer rebuilds the generator from
+  its seed/permalink — it captures the live, edited map, so renamed features, added towns,
+  paintings, and other tweaks survive (previously they were lost whenever the generator
+  window was detached). One Page Dungeon reads its data directly from the live controller,
+  so it stays edit-preserving while detached too.
+- **One Page Dungeon "Small Tiles"** now imports at the right density — the Foundry grid
+  matches the displayed 2× grid (one small tile per square) instead of being twice too
+  coarse.
+- **Dwelling capture in a hidden / background window**: force a synchronous OpenFL render
+  so a detached or backgrounded generator still produces a real frame, instead of a blank
+  capture that dropped to the flat fallback image.
 - Imported scenes set fog exploration via the correct **`fog.mode`** field. Foundry v13+
   renamed it from the old top-level `fogExploration` (which was silently dropped), so
   overview maps now reliably import fully revealed.
 - Removed the iframe `sandbox` attribute on the generator viewer. The framed content is
   the module's own first-party generator and the parent reads it same-origin, so the
   sandbox isolated nothing while tripping Chrome's *"can escape its sandboxing"* console
-  warning. (Matches the inline journal viewer, which never sandboxed its iframe.)
+  warning.
 
 ## 0.2.3 — 2026-06-21
 
