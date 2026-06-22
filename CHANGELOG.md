@@ -2,6 +2,15 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## 0.2.2 — 2026-06-21
+
+### Fixed
+- Removed a harmless console 404: the "load saved map state" check now uses a real file
+  listing instead of a HEAD request, so opening a fresh (never-saved) map no longer logs a
+  `maps/maphub/…json` 404.
+- Cave / Glade fonts now load in fetch mode (the loader points at the module's bundled
+  fonts instead of un-fetched generator assets).
+
 ## 0.2.1 — 2026-06-21
 
 ### Fixed

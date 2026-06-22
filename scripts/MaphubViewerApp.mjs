@@ -128,14 +128,19 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// Preload saved map state (if it exists) into localStorage
 		try {
 			const mapId = this._getMapIdFromQuery();
-			const saveStr = `data/maps/maphub/maphub_${mapId}.json`;
-			const reqUrl = window.location.origin + "/" + saveStr.replace("data/", "");
-			const headRes = this._mapType === "dungeon" ? null : await fetch(reqUrl, { method: "HEAD" });
-			if (headRes?.ok) {
-				const res = await fetch(reqUrl);
-				loadedJsonText = await res.text();
-				window.localStorage.setItem("_toy_town_buf_", "j" + loadedJsonText);
-				ui.notifications.info("Loaded Maphub saved state!");
+			// Check via FilePicker (real file listing) so the common "no saved state" case
+			// doesn't log a console 404 for a missing file.
+			const fileName = `maphub_${mapId}.json`;
+			const FP = foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;
+			let saved = false;
+			try { const r = await FP.browse("data", "maps/maphub"); saved = (r.files || []).some(f => f.split("/").pop() === fileName); } catch { saved = false; }
+			if (saved && this._mapType !== "dungeon") {
+				const res = await fetch(`${window.location.origin}/maps/maphub/${fileName}`);
+				if (res.ok) {
+					loadedJsonText = await res.text();
+					window.localStorage.setItem("_toy_town_buf_", "j" + loadedJsonText);
+					ui.notifications.info("Loaded Maphub saved state!");
+				}
 			}
 		} catch (err) {
 			// No saved file exists, ignore
