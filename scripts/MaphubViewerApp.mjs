@@ -1909,6 +1909,30 @@ export class MaphubViewerApp extends ApplicationV2 {
 	}
 
 	/**
+	 * The dungeon's current grid scale: 1 = normal, 2 = "Small tiles" (Layers ▸ Grid ▸
+	 * Small Tiles → half-size cells, 2× density, 4 tiles per normal cell). The live
+	 * scale lives in a closure-private static, so read it from the generator's persisted
+	 * state (`com.watabou.dungeon`, keyed by the iframe's blob URL); absent ⇒ default 1.
+	 * Used so the imported Foundry grid matches the displayed grid density.
+	 */
+	_getDungeonGridScale() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const uuid = (this._iframe?.src || "").split("/").pop();
+			if (!cw?.localStorage || !uuid) return 1;
+			for (let i = 0; i < cw.localStorage.length; i++) {
+				const k = cw.localStorage.key(i);
+				if (k && k.includes(uuid) && k.includes("com.watabou.dungeon")) {
+					const m = (cw.localStorage.getItem(k) || "").match(/gridScale(?:i(-?\d+)|z)/);
+					const v = (m && m[1] != null) ? parseInt(m[1], 10) : 1;
+					return v >= 1 ? v : 1;
+				}
+			}
+			return 1;   // not persisted → default
+		} catch (e) { return 1; }
+	}
+
+	/**
 	 * Internal local-units-per-grid-cell the generator draws the dungeon at.
 	 * The map sprite's floor layer bounds equal (gridBounds × 30) exactly, so 30
 	 * is the constant. We still verify it against the live floor layer when the
@@ -2001,7 +2025,13 @@ export class MaphubViewerApp extends ApplicationV2 {
 					y: Math.round(M.b * lx + M.d * ly + M.ty),
 				};
 			};
-			const cellPx = cell * Math.hypot(M.a, M.b);
+			// `cell`/`toPixel` stay in LOGICAL dungeon cells (wall + rect coords). The
+			// grid SIZE, though, must follow the displayed grid: "Small tiles"
+			// (gridScale 2) draws cells at 30/gridScale — 2× density — so one Foundry
+			// square should be one *small* tile. Walls sit on logical-cell boundaries,
+			// so they land on every gridScale-th line; the image rescale keeps it exact.
+			const gridScale = this._getDungeonGridScale();
+			const cellPx = (cell / Math.max(1, gridScale)) * Math.hypot(M.a, M.b);
 			return { toPixel, cellPx };
 		} catch (err) {
 			console.warn(`${MODULE_ID} | Failed to read dungeon render transform`, err);
