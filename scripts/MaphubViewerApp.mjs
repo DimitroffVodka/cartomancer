@@ -204,6 +204,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// and imports as — a Foundry-friendly flat-top hex grid.
 		if (this._mapType === "realm") this._forceRealmFlatTopWhenReady();
 
+		// Dwellings: default to the 2× "Double grid" so the building displays — and
+		// imports as — a finer Foundry grid (one small cell per square).
+		if (this._mapType === "dwellings") this._forceDwellDoubleGridWhenReady();
+
 		this._maybeAutoDetach();
 	}
 
@@ -1957,6 +1961,35 @@ export class MaphubViewerApp extends ApplicationV2 {
 			}
 			return false;   // not persisted → off
 		} catch (e) { return false; }
+	}
+
+	/**
+	 * Force the Dwellings "Double grid" on (2× density — half-size cells) so a dwelling
+	 * displays and imports with the finer grid by default. Mirrors the realm flat-top
+	 * default. Toggles only when it's currently off; the import reads the live/persisted
+	 * state, so a user who turns it back off is respected.
+	 */
+	async _forceDwellDoubleGrid() {
+		try {
+			const dv = this._iframe?.contentWindow?.__sdxDwellView;
+			if (!dv || typeof dv.toggleDoubleGrid !== "function") return false;
+			if (this._getDwellDoubleGrid()) return true;     // already on
+			try { dv.toggleDoubleGrid(); } catch (_) { }
+			await new Promise(r => setTimeout(r, 400));       // let it redraw + persist
+			return this._getDwellDoubleGrid();
+		} catch (err) {
+			console.warn(`${MODULE_ID} | Failed to force dwelling double-grid`, err);
+			return false;
+		}
+	}
+
+	/** Poll until the dwellings generator is live, then default "Double grid" on. */
+	async _forceDwellDoubleGridWhenReady() {
+		for (let i = 0; i < 30; i++) {
+			const dv = this._iframe?.contentWindow?.__sdxDwellView;
+			if (dv && typeof dv.toggleDoubleGrid === "function") { await this._forceDwellDoubleGrid(); return; }
+			await new Promise(r => setTimeout(r, 400));
+		}
 	}
 
 	/**
