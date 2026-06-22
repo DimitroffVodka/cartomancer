@@ -1247,6 +1247,12 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const mi = Math.floor(cmi - ROOF), mj = Math.floor(cmj - ROOF), Mi = Math.ceil(cMi + ROOF), Mj = Math.ceil(cMj + ROOF);
 				const cellsW = Math.max(1, Mj - mj), cellsH = Math.max(1, Mi - mi);
 				const gridPx = Math.max(60, Math.min(160, Math.round(units[baseIdx].M.a * 1.8)));
+				// "Double grid" (Plan view ▸ Grid) draws the building grid at 2× density
+				// (half-size cells). Walls/rooms stay on the coarse building cell (gridPx),
+				// so keep the image + walls at gridPx but halve the Foundry grid so one
+				// small cell = one Foundry square (walls then fall on every other line) —
+				// matching what the generator displays.
+				const dwellGridSize = this._getDwellDoubleGrid() ? Math.max(30, Math.round(gridPx / 2)) : gridPx;
 				const sceneW = Math.round(cellsW * gridPx);
 				const sceneH = Math.round(cellsH * gridPx);
 				const nodeToScene = (j, i) => ({ x: Math.round((j - mj) * gridPx), y: Math.round((i - mi) * gridPx) });
@@ -1269,7 +1275,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 				const dwellDefaults = this._getSceneImportDefaults();
 				const sceneData = {
 					name: sceneName, width: sceneW, height: sceneH,
-					grid: { size: gridPx, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
+					grid: { size: dwellGridSize, type: dwellDefaults.gridType }, padding: 0, backgroundColor: "#000000",
 					fog: { mode: dwellDefaults.fogMode }, tokenVision: dwellDefaults.tokenVision,
 					background: { src: units[baseIdx].bg },
 					levels: units.map(u => ({ name: u.name, elevation: { bottom: u.bottom, top: u.top }, background: levelBg(u.bg), textures: fillTex })),
@@ -1930,6 +1936,27 @@ export class MaphubViewerApp extends ApplicationV2 {
 			}
 			return 1;   // not persisted → default
 		} catch (e) { return 1; }
+	}
+
+	/**
+	 * Whether the Dwellings generator's "Double grid" is on (2× grid density — the
+	 * building grid drawn at half-size cells, like the dungeon's Small Tiles). Read
+	 * from the generator's persisted state (`com.watabou.house`, keyed by the iframe's
+	 * blob URL); absent ⇒ off. Used so the imported Foundry grid matches the display.
+	 */
+	_getDwellDoubleGrid() {
+		try {
+			const cw = this._iframe?.contentWindow;
+			const uuid = (this._iframe?.src || "").split("/").pop();
+			if (!cw?.localStorage || !uuid) return false;
+			for (let i = 0; i < cw.localStorage.length; i++) {
+				const k = cw.localStorage.key(i);
+				if (k && k.includes(uuid) && k.includes("com.watabou.house")) {
+					return /doubleGridt/.test(cw.localStorage.getItem(k) || "");
+				}
+			}
+			return false;   // not persisted → off
+		} catch (e) { return false; }
 	}
 
 	/**
