@@ -839,12 +839,16 @@ export class MaphubViewerApp extends ApplicationV2 {
 	async _importScene() {
 		if (!game.user.isGM) return;
 
-		// Capturing reads the iframe's live canvas + model, which works even while the
-		// window is detached. Only dock back if the canvas is genuinely unreachable:
-		// docking rebuilds the iframe from the seed/permalink, which regenerates the base
-		// map and DESTROYS the user's manual edits (renamed features, added towns,
-		// paintings, moved labels…). (_canAttach() is true only when detached.)
-		if (this._canAttach?.() && !this._isMapCanvasReadable()) {
+		// Capturing reads the iframe's live canvas + model, which works for every
+		// generator EXCEPT One Page Dungeon even while the window is detached — so we
+		// DON'T dock back (docking rebuilds the iframe from the seed/permalink, which
+		// regenerates the base map and destroys manual edits: renamed features, added
+		// towns, paintings, moved labels). One Page Dungeon is the exception: its wall
+		// export fires via a synthetic 'J' keypress that's unreliable while detached, so
+		// it docks back to import reliably. Its geometry is seed-deterministic (walls
+		// survive the rebuild); cosmetic edits don't — import while docked to keep them.
+		// (_canAttach() is true only when detached; capture also needs a reachable canvas.)
+		if (this._canAttach?.() && (this._mapType === "dungeon" || !this._isMapCanvasReadable())) {
 			ui.notifications.info("Docking the generator back so the map can be imported…");
 			try {
 				if (this._mapType === "realm") {
@@ -881,6 +885,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 		// Bb.exportJSON inside the generator which flows through our saveAs
 		// hook → _lastSavedDungeonJson.
 		if (isDungeon) {
+			// Dungeon is docked by the guard above, so the 'J'-key export fires reliably.
 			const exported = await this._exportCurrentDungeonJson();
 			if (!exported) {
 				ui.notifications.warn("Could not export dungeon JSON. Make sure the One Page Dungeon generator is fully loaded before Import Scene.");
@@ -1845,17 +1850,23 @@ export class MaphubViewerApp extends ApplicationV2 {
 			this._lastSavedDungeonJson = null;
 			this._lastSavedDungeonJsonAt = 0;
 
-			const keyEvent = new cw.KeyboardEvent("keydown", {
-				key: "j", code: "KeyJ", keyCode: 74, which: 74,
-				bubbles: true, cancelable: true
-			});
-			doc.body?.dispatchEvent(keyEvent);
-			doc.dispatchEvent(keyEvent);
-
-			// Poll for saveAs hook to deliver the JSON (up to 5 s)
-			for (let i = 0; i < 50; i++) {
+			// The generator exports JSON on the 'J' key. A single synthetic keydown is
+			// unreliable while the window is detached (it doesn't always reach the
+			// generator's key handler), so dispatch to window + document + body and
+			// RE-dispatch periodically while polling.
+			const fire = () => {
+				const ev = new cw.KeyboardEvent("keydown", { key: "j", code: "KeyJ", keyCode: 74, which: 74, bubbles: true, cancelable: true });
+				try { cw.dispatchEvent(ev); } catch (_) {}
+				try { doc.dispatchEvent(ev); } catch (_) {}
+				try { doc.body?.dispatchEvent(ev); } catch (_) {}
+			};
+			fire();
+			// Poll up to ~8 s for the saveAs hook to deliver the JSON, re-firing the
+			// key roughly every second until it lands.
+			for (let i = 0; i < 80; i++) {
 				await new Promise(r => setTimeout(r, 100));
 				if (this._lastSavedDungeonJson) return true;
+				if (i > 0 && i % 10 === 0) fire();
 			}
 			return false;
 		} catch (err) {
