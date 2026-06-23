@@ -66,7 +66,7 @@ export class DDPackSettingsApp extends ApplicationV2 {
         } else {
             document.head.insertAdjacentHTML("beforeend", STYLES);
         }
-        const packs = getDDPacks();
+        const packs = await getDDPacks();
         const el = document.createElement("div");
         el.className = "sdx-ddpack-settings";
         el.innerHTML = `
@@ -129,7 +129,7 @@ export class DDPackSettingsApp extends ApplicationV2 {
                 this.render();
             });
             row.querySelector(".sdx-ddpack-remove")?.addEventListener("click", async () => {
-                const pack = getDDPacks().find(p => p.packId === packId);
+                const pack = (await getDDPacks()).find(p => p.packId === packId);
                 const ok = await foundry.applications.api.DialogV2.confirm({
                     window: { title: "Remove Dungeondraft Pack" },
                     content: `<p>Remove <strong>${escapeHtml(pack?.folderLabel || pack?.name || packId)}</strong> from the decor browser?</p><p>Extracted files stay in <code>Data/${DD_DECOR_BASE}/${escapeHtml(packId)}/</code>.</p>`,

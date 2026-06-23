@@ -98,7 +98,7 @@ export class DecorBrowserApp extends ApplicationV2 {
             const prevOpen = this.open;
             try { this.allTiles = await loadDDPackDecorTiles(); }
             catch (e) { console.error(`${MODULE_ID} | reload decor failed`, e); this.allTiles = []; }
-            this.tree = this.#buildTree(this.allTiles);
+            this.tree = await this.#buildTree(this.allTiles);
             this.open = prevOpen;
             if (!Object.keys(this.open).length && this.tree[0]) this.open[this.tree[0].key] = true;
             if (!this.#nodeByKey(prevView)) this.viewKey = this.tree[0]?.key ?? null;
@@ -234,7 +234,7 @@ export class DecorBrowserApp extends ApplicationV2 {
         this.loading = true;
         try {
             this.allTiles = await loadDDPackDecorTiles();
-            this.tree = this.#buildTree(this.allTiles);
+            this.tree = await this.#buildTree(this.allTiles);
             this.viewKey = this.tree[0]?.key ?? null;
             if (this.tree[0]) this.open[this.tree[0].key] = true;   // first pack open so categories show
         } catch (e) {
@@ -255,7 +255,7 @@ export class DecorBrowserApp extends ApplicationV2 {
     }
 
     // category = "ddpack/<packId>/<a>/<b>/…" or "ddpack/<packId>/__root__" (segments already decoded).
-    #buildTree(tiles) {
+    async #buildTree(tiles) {
         const roots = [];
         const byKey = new Map();
         for (const tile of tiles) {
@@ -279,7 +279,7 @@ export class DecorBrowserApp extends ApplicationV2 {
         // Surface disabled packs as greyed roots so the eye toggle can re-enable them
         // (loadDDPackDecorTiles only returns enabled packs, so they have no tiles).
         const present = new Set(roots.map(r => r.packId));
-        for (const pack of getDDPacks()) {
+        for (const pack of await getDDPacks()) {
             if (pack.enabled === false && !present.has(pack.packId)) {
                 const node = { key: pack.packId, label: shortLabel(pack.name || pack.packId), children: [], tiles: [], packId: pack.packId, disabled: true };
                 byKey.set(node.key, node);

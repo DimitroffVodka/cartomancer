@@ -79,9 +79,9 @@ Hooks.once("init", () => {
 		scope: "client", config: true, type: Boolean, default: false,
 	});
 	// DungeonDraft decor packs (no packs are bundled — users import their own).
-	game.settings.register(MODULE_ID, "decorDungeondraftPacks", {
-		scope: "world", config: false, type: Array, default: [],
-	});
+	// The pack registry is no longer a world setting: it's derived from the per-pack
+	// _index.json files under Data/decor/ddpacks/, so an import in one world is visible
+	// in every world (and never needs re-uploading). See DDPackManagerSD.getDDPacks().
 	game.settings.registerMenu(MODULE_ID, "decorDungeondraftPacksMenu", {
 		name: "DungeonDraft Decor Packs",
 		label: "Manage Packs",

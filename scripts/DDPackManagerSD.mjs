@@ -6,7 +6,6 @@
  */
 
 const MODULE_ID = "cartomancer";
-const SETTING_KEY = "decorDungeondraftPacks";
 export const DD_DECOR_BASE = "decor/ddpacks";
 
 const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;
@@ -88,16 +87,70 @@ async function ensureDirectory(path) {
     }
 }
 
-export function getDDPacks() {
+// --- Registry: derived from the on-disk _index.json files, NOT a world setting. ---
+// The decor/ddpacks/ folder lives at the Foundry user-data level (shared by every world),
+// so reading the pack list from disk makes an import in one world visible in all of them —
+// and avoids re-uploading the same pack per world. Each pack's enabled/removed state is
+// persisted back into its own _index.json so toggles are global too.
+
+const packIndexPath = (packId) => `${DD_DECOR_BASE}/${packId}/_index.json`;
+
+async function readDataJSON(path) {
     try {
-        return game.settings.get(MODULE_ID, SETTING_KEY) || [];
+        // no-store so an _index.json rewritten by a toggle is read fresh, not from cache.
+        const resp = await fetch(foundry.utils.getRoute(path), { cache: "no-store" });
+        if (!resp.ok) return null;
+        return await resp.json();
     } catch {
-        return [];
+        return null;
     }
 }
 
-export async function saveDDPacks(packs) {
-    await game.settings.set(MODULE_ID, SETTING_KEY, packs);
+async function writePackIndex(packId, data) {
+    const FP = FilePickerImpl();
+    const indexFile = new File(
+        [new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })],
+        "_index.json",
+        { type: "application/json" }
+    );
+    await FP.upload("data", `${DD_DECOR_BASE}/${packId}`, indexFile, {}, { notify: false });
+}
+
+function normalizePack(data, fallbackId) {
+    const packId = data?.packId || fallbackId;
+    return {
+        packId,
+        name: data?.name || packId,
+        author: data?.author || "",
+        version: data?.version || "",
+        folderLabel: data?.folderLabel || data?.name || packId,
+        assetCount: Number(data?.assetCount || 0),
+        enabled: data?.enabled !== false
+    };
+}
+
+export async function getDDPacks() {
+    const FP = FilePickerImpl();
+    let listing;
+    try {
+        listing = await FP.browse("data", DD_DECOR_BASE);
+    } catch {
+        return [];   // base folder not created yet → nothing imported
+    }
+    const packs = [];
+    const seen = new Set();
+    for (const dir of listing.dirs || []) {
+        const dirName = decodeURIComponent(dir.split("/").filter(Boolean).pop() || "");
+        if (!dirName || seen.has(dirName)) continue;
+        // Fall back to the folder name when _index.json is missing (e.g. an old import whose
+        // index write failed) so the pack is still discovered rather than silently dropped.
+        const data = await readDataJSON(`${dir}/_index.json`);
+        if (data?.removed) continue;   // soft-deleted: hidden everywhere, files kept on disk
+        seen.add(dirName);
+        packs.push(normalizePack(data, dirName));
+    }
+    packs.sort((a, b) => (a.folderLabel || a.name).localeCompare(b.folderLabel || b.name));
+    return packs;
 }
 
 export async function scanDDPack(file) {
@@ -198,39 +251,47 @@ export async function extractDDPack(file, folderLabel, onProgress, selectedPaths
         enabled: true
     };
 
-    const indexFile = new File(
-        [new Blob([JSON.stringify(indexData, null, 2)], { type: "application/json" })],
-        "_index.json",
-        { type: "application/json" }
-    );
+    // The on-disk _index.json is now the registry's source of truth (shared across all
+    // worlds via the Data folder), so make the write best-effort but always attempted.
     try {
-        await FP.upload("data", basePath, indexFile, {}, { notify: false });
-    } catch {
-        // Index is helpful but not required for tray loading.
+        await writePackIndex(packId, indexData);
+    } catch (err) {
+        console.warn(`${MODULE_ID} | Could not write Dungeondraft pack index for ${packId}:`, err);
     }
 
     return indexData;
 }
 
 export async function upsertDDPack(pack) {
-    const packs = getDDPacks();
-    const existing = packs.findIndex(p => p.packId === pack.packId);
-    if (existing >= 0) packs[existing] = { ...packs[existing], ...pack, enabled: pack.enabled ?? packs[existing].enabled ?? true };
-    else packs.push({ ...pack, enabled: pack.enabled ?? true });
-    await saveDDPacks(packs);
+    if (!pack?.packId) return;
+    const existing = await readDataJSON(packIndexPath(pack.packId)) || {};
+    const merged = {
+        ...existing,
+        ...pack,
+        enabled: pack.enabled ?? existing.enabled ?? true,
+        removed: false   // re-importing restores a previously removed pack
+    };
+    await writePackIndex(pack.packId, merged);
 }
 
 export async function setDDPackEnabled(packId, enabled) {
-    const packs = getDDPacks().map(pack => pack.packId === packId ? { ...pack, enabled: !!enabled } : pack);
-    await saveDDPacks(packs);
+    // Self-heal a missing index (synthesized entry) by writing a minimal one.
+    const data = (await readDataJSON(packIndexPath(packId))) || { packId, name: packId, folderLabel: packId };
+    data.enabled = !!enabled;
+    await writePackIndex(packId, data);
 }
 
 export async function removeDDPack(packId) {
-    await saveDDPacks(getDDPacks().filter(pack => pack.packId !== packId));
+    // FilePicker exposes no file-delete, so "remove" is a soft-delete written to the index:
+    // hidden in every world while the extracted textures stay on disk (as the UI promises).
+    const data = (await readDataJSON(packIndexPath(packId))) || { packId };
+    data.removed = true;
+    data.enabled = false;
+    await writePackIndex(packId, data);
 }
 
 export async function loadDDPackDecorTiles() {
-    const packs = getDDPacks().filter(pack => pack.enabled !== false);
+    const packs = (await getDDPacks()).filter(pack => pack.enabled !== false);
     const FP = FilePickerImpl();
     const tiles = [];
 

@@ -100,7 +100,12 @@ license-clean path: a distributed build can ship without Watabou's code. Uploads
 
 **8. DungeonDraft decor** — `DDPackManagerSD.mjs` (parse/extract PCK packs into `Data/decor/ddpacks/`),
 `DDPackSettingsAppSD.mjs` + `DDPackPreviewAppSD.mjs` (import UI), `DecorBrowserApp.mjs` (browse +
-drag onto scene as tiles). World setting `decorDungeondraftPacks`. **No art is bundled.**
+drag onto scene as tiles). **No art is bundled.** The pack registry is **filesystem-derived, not a
+world setting**: `getDDPacks()` scans the per-pack `_index.json` files under `Data/decor/ddpacks/`
+(which lives at user-data level, shared by every world), so an import in one world is visible in all
+of them and never needs re-uploading. Enable/disable and remove are persisted back into each pack's
+`_index.json` (remove is a soft-delete `removed:true` flag — FilePicker has no file-delete — so the
+extracted textures stay on disk), making those states global too. `getDDPacks()` is therefore async.
 
 **9. `scripts/maphub/OnePageParserSD.mjs`** — pure parser: One Page Dungeon JSON → rooms/walls/doors
 geometry. Used by the dungeon import path; zero coupling.
@@ -110,7 +115,8 @@ geometry. Used by the dungeon import path; zero coupling.
 - `settlement.useLocalMaphub` (world, default **true**) — run bundled generators locally; **required
   for import** (hosted pages can't be captured cross-origin). Off = view-only via watabou.github.io.
 - `openGeneratorsDetached` (client, default false).
-- `decorDungeondraftPacks` (world, hidden array) — imported DD pack registry.
+- DD decor packs are **not** stored in a setting — the registry is derived from the on-disk
+  `_index.json` files under `Data/decor/ddpacks/` (see §8), so it's shared across all worlds.
 - Two `registerMenu` stubs: *Manage Packs* and *Download Generators*.
 
 ## Conventions
