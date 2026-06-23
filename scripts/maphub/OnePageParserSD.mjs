@@ -228,6 +228,7 @@ export class OnePageParserSD {
             const notes = (info.notes || []).map(d => ({
                 x: d.pos.x,
                 y: d.pos.y,
+                ref: d.ref,
                 text: wrap(d.text, 24),
                 iconTint: "#FF0010",
                 textColor: "#FF0010"
@@ -306,6 +307,7 @@ export class OnePageParserSD {
             return {
                 x: d.pos.x * g - minvals[0] + x_offset,
                 y: d.pos.y * g - minvals[1] + y_offset,
+                ref: d.ref,
                 text: txt,
                 iconTint: "#FF0010",
                 textColor: "#FF0010"

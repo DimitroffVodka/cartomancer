@@ -329,6 +329,58 @@ export class RealmImporter {
 		}
 	}
 
+	/**
+	 * Build a standalone dungeon JournalEntry from a One Page Dungeon JSON: an
+	 * optional story/overview page plus one text page per numbered room. Each room
+	 * page is tagged with its note `ref`, so the scene's numbered Note pins can
+	 * deep-link to the matching page. Returns `{ je, pageByRef }` (ref → pageId).
+	 */
+	static async createDungeonJournal(name, dungeonJson, { folderId = null } = {}) {
+		let d = dungeonJson;
+		if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } }
+		if (!d || typeof d !== "object") return null;
+
+		const rooms = (Array.isArray(d.notes) ? d.notes : [])
+			.filter(n => n && (n.text || n.ref))
+			.map(n => ({ ref: (n.ref != null && n.ref !== "") ? String(n.ref) : null, text: String(n.text || "") }))
+			.sort((a, b) => (parseInt(a.ref, 10) || 0) - (parseInt(b.ref, 10) || 0));
+
+		const pages = [];
+		if (d.story) {
+			pages.push({
+				name: "Overview", type: "text", title: { show: false },
+				text: { content: `<p><em>${escapeHtml(String(d.story))}</em></p>`, format: 1 },
+			});
+		}
+		for (const r of rooms) {
+			const firstLine = (r.text.split("\n")[0] || "").trim();
+			const title = `${r.ref ? `${r.ref}. ` : ""}${firstLine || "Room"}`.slice(0, 60);
+			pages.push({
+				name: title,
+				type: "text", title: { show: true },
+				text: { content: `<p>${escapeHtml(r.text).replace(/\n/g, "<br>")}</p>`, format: 1 },
+				flags: { [MODULE_ID]: { roomRef: r.ref } },
+			});
+		}
+		if (!pages.length) {
+			pages.push({ name: "Notes", type: "text", title: { show: false }, text: { content: "<p>(No room notes.)</p>", format: 1 } });
+		}
+
+		const je = await JournalEntry.create({
+			name: String(name || "Dungeon"),
+			folder: folderId || null,
+			flags: { [MODULE_ID]: { dungeonKey: true } },
+			pages,
+		});
+
+		const pageByRef = {};
+		for (const p of je.pages.contents) {
+			const ref = p.getFlag(MODULE_ID, "roomRef");
+			if (ref != null) pageByRef[String(ref)] = p.id;
+		}
+		return { je, pageByRef };
+	}
+
 	/** One delegated listener handles "Generate this map" + "Open scene" clicks, any sheet version. */
 	static registerHooks() {
 		if (RealmImporter._wired) return;

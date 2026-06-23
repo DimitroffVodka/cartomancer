@@ -1052,6 +1052,35 @@ export class MaphubViewerApp extends ApplicationV2 {
 			if (walls.length) {
 				await scene.createEmbeddedDocuments("Wall", walls);
 			}
+			// Dungeon pins link back to a journal: a standalone dungeon gets its own
+			// JournalEntry (story + one page per numbered room); a realm-location dungeon
+			// points at its location journal (whose room key is folded in below). Each
+			// numbered pin deep-links to its room's page when one exists.
+			if (isDungeon && notes.length) {
+				try {
+					const { RealmImporter } = await import("./RealmImporter.mjs");
+					let entryId = null, pageByRef = null;
+					if (this._importContext?.journalUuid) {
+						const je = await fromUuid(this._importContext.journalUuid);
+						entryId = je?.id ?? null;
+					} else if (this._lastSavedDungeonJson) {
+						const made = await RealmImporter.createDungeonJournal(sceneName, this._lastSavedDungeonJson, { folderId: this._importContext?.folderId || null });
+						if (made?.je) {
+							entryId = made.je.id;
+							pageByRef = made.pageByRef || null;
+							try { await scene.update({ journal: made.je.id }); } catch { /* non-fatal */ }
+						}
+					}
+					if (entryId) {
+						notes = notes.map(n => {
+							const o = { ...n, entryId };
+							const pid = (pageByRef && n.ref != null) ? pageByRef[String(n.ref)] : null;
+							if (pid) o.pageId = pid;
+							return o;
+						});
+					}
+				} catch (e) { console.error(`${MODULE_ID} | dungeon journal link failed`, e); }
+			}
 			if (notes.length) {
 				await scene.createEmbeddedDocuments("Note", notes);
 			}
