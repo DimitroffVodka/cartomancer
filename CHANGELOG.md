@@ -2,6 +2,27 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## 0.4.0 — 2026-06-24
+
+### Added
+- **Generator update prompts.** When the module ships a refreshed generator build, a GM who
+  already downloaded that generator is offered a one-click re-download on load. It's gated on
+  a module-controlled revision, so it fires once per update — not every world load — and never
+  chases upstream changes you haven't validated. Your current copy keeps working until you
+  accept, and the staleness check is fully local (no network until you click **Update now**).
+
+### Fixed
+- **Perilous Shores realm download, broken by Watabou's 1.9.0 rebuild.** The rebuild renamed
+  the minified entry symbol our download hook anchored on, so fetching the realm generator
+  failed with "hook anchor not found". The realm (and cave) hooks now recover the symbols from
+  the bundle's own structure instead of hardcoding them, surviving this rebuild and future ones.
+
+### Changed
+- **Refreshed the bundled Perilous Shores to 1.9.0** — denser, larger mountains ("Massifs"),
+  schematic **Heraldic** town icons, coastal **lighthouses**, and more prominent flags.
+- **Perilous Shores guide** updated for the new 1.9.0 controls (Massifs, Heraldic, Harbours),
+  plus an import note that the larger mountains can crowd roads and settlements.
+
 ## 0.3.1 — 2026-06-23
 
 ### Changed

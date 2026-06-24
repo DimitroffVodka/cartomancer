@@ -103,6 +103,7 @@ Toggles for terrain detail and the Towns dialog. A checkmark means the toggle is
 | Item | What it does | Default |
 |------|--------------|---------|
 | **Rugged** | Mountains get jagged, broken outlines (fantasy look) vs. smooth. Note: this **regenerates the whole region**, so it's slower than the other toggles. | On |
+| **Massifs** | Draws the newer "super-mountains" (1.9.0): denser, larger ranges, with individual peaks growing the further they sit from their range's edge — more dramatic on big maps and with the **highland** tag. Uncheck to fall back to the older, smaller mountains. (The old "smooth" mountains — see *Rugged* — look odd with Massifs on.) | On |
 | **Towns…** | Opens the Towns dialog (below). | — |
 | **Dangers** | Shows/hides danger markers (dungeons, hazards). | On |
 | **Meadows** | Shows/hides small decorative grass/field sprites in open terrain. | On |
@@ -125,11 +126,15 @@ This dialog also groups several settlement-overlay toggles that live here rather
 | **Hidden / Icons / Pins** | Icons | How settlements are drawn (radio group): hidden, building icons, or map pins. With **Pins**, Suburbs and Reroll are disabled. |
 | **Outline** | Off | Draws outline strokes around town icons. |
 | **Uniform** | Off | On = all towns share one architectural style; off = each town can look different. |
+| **Heraldic** | Off | Makes town icons schematic — flat, emblem-like symbols without the fake-perspective 3D effect (1.9.0). |
 | **Reroll** | — | Randomizes the currently shown town icons (architecture). |
 | **Suburbs** | On | Shows tiny suburban houses (and the occasional windmill) around settlements. |
 | **Fields** | Off | Shows farm fields around settlements. |
 | **Roads** | On | Shows roads connecting settlements. |
 | **Sea routes** | Off | Shows dotted sea routes on the water. |
+| **Harbours** | On | Shows lighthouses on coastal settlements that have enough sea routes leaving them; each lighthouse mirrors its town's style (1.9.0). Uncheck to hide them. |
+
+> **Settlement icons (1.9.0):** city icons were reworked. **Heraldic** gives a flatter, emblem-like look (no fake perspective), coastal towns can sport **lighthouses** (toggle **Harbours**), and flags are drawn more prominently — groundwork for per-kingdom flag colors. Roads also render more cleanly.
 
 ### Labels submenu
 
@@ -395,6 +400,7 @@ A Perilous Shores realm is a region/world map — and Cartomancer imports it as 
 - For resolution, set a large **Size preset** in **Parameters…** before generating — **Large (1800)** or **Huge (2700)**. A bigger map captures sharper.
 - You don't need to touch the hex mode — Cartomancer sets flat-top for you. (Switch to **Pointy topped** and the import follows it with a pointy Foundry hex grid; **Warped** falls back to a plain gridless image.)
 - Trim clutter to taste: **Labels**, and under **Elements** the **Descriptions**, **Compass**, **Matte**, and **Clouds** overlays. A clean style preset (**Default**, **Antique**, **Soft**) imports well.
+- **The new larger mountains (Details ▸ Massifs, 1.9.0) can crowd roads and settlements.** If they hide the towns in your capture, disable **Massifs** or set the **Towns** dialog to **Pins** before importing.
 - Turn on **hex numbers** (`N`) if you want the generator's coordinates baked into the image for referencing.
 - To import individual locations *as their own scenes*, use the realm's location journals (**Generate this map**) rather than capturing the whole region — see the module's realm-import flow.
 

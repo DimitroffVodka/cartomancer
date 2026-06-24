@@ -78,6 +78,12 @@ Hooks.once("init", () => {
 		hint: "Pop each map generator into its own window when opened. Avoids Foundry's core 'Detach Window' control later reloading (and regenerating) a map you've already worked on.",
 		scope: "client", config: true, type: Boolean, default: false,
 	});
+	// Per-type record of which module-shipped generator revision the GM has acknowledged, so
+	// the "a refreshed generator is available" prompt (GeneratorFetcher.promptStaleRefresh)
+	// fires once per bump rather than every world load.
+	game.settings.register(MODULE_ID, "acknowledgedGenRev", {
+		scope: "world", config: false, type: Object, default: {},
+	});
 	// DungeonDraft decor packs (no packs are bundled — users import their own).
 	// The pack registry is no longer a world setting: it's derived from the per-pack
 	// _index.json files under Data/decor/ddpacks/, so an import in one world is visible
@@ -123,6 +129,9 @@ Hooks.once("ready", async () => {
 			downloadAllGenerators: (cb) => GeneratorFetcher.downloadAll(cb),
 			isGeneratorDownloaded: (t) => GeneratorFetcher.isDownloaded(t),
 		};
+		// If the module shipped a refreshed generator build, offer existing downloaders a
+		// re-download (GM-only, gated on acknowledgedGenRev). Fire-and-forget — never block ready.
+		GeneratorFetcher.promptStaleRefresh().catch((e) => console.error(`${MODULE_ID} | promptStaleRefresh failed`, e));
 	} catch (e) {
 		console.error(`${MODULE_ID} | RealmImporter wiring failed`, e);
 		const mod = game.modules.get(MODULE_ID);

@@ -30,6 +30,17 @@ const WATABOU = "https://watabou.github.io";
 export const FETCH_ROOT = "cartomancer-generators";   // under Data/
 const MARKER = "_cartomancer.json";                   // download-complete marker (allowed ext)
 
+/**
+ * Module-controlled generator revisions — OUR versioning, never Watabou's (we never poll
+ * upstream). Bump a type's number when you refresh its bundled build or fix its patch and
+ * want existing downloaders re-prompted to re-fetch. The marker records the rev that was
+ * downloaded; on load we compare it to these and offer a refresh (see promptStaleRefresh).
+ * Unlisted types are rev 0 (never prompt).
+ *   realm: 1 — Perilous Shores 1.9.0 (new mountains; minifier R→U patch-anchor fix).
+ */
+export const GEN_REV = { realm: 1 };
+export const genRev = (type) => GEN_REV[type] ?? 0;
+
 const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;
 
 /**
@@ -37,7 +48,9 @@ const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementatio
  * - slug:      watabou.github.io path segment.
  * - bundleDir: our shipped index.html loader dir (scripts/maphub/<bundleDir>/index.html).
  * - js:        [{ name, from, patch? }] — `from` is the live filename, `name` the local
- *              basename; saved as `<name>.txt`; `patch` = {anchor, replace} (our hook).
+ *              basename; saved as `<name>.txt`. `patch` is our hook: either a literal
+ *              {anchor, replace} splice, or {exposeClasses:true} for Haxe-registry
+ *              generators (realm, cave) — see exposeHaxeClasses().
  * - assetDir:  case the generator expects ("Assets" or "assets").
  * - assets:    data files under <live>/<assetDir>/ (fonts/favicons omitted — cosmetic;
  *              .woff would be blocked by FilePicker anyway).
@@ -45,10 +58,7 @@ const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementatio
 const MANIFESTS = {
 	realm: {
 		slug: "perilous-shores", bundleDir: "to/realm", assetDir: "Assets",
-		js: [{ name: "Perilous.js", from: "Perilous.js", patch: {
-			anchor: "R.main()})(",
-			replace: 'R.main(),(typeof window!="undefined"?window:self).__maphubClasses=h})(',
-		} }],
+		js: [{ name: "Perilous.js", from: "Perilous.js", patch: { exposeClasses: true } }],
 		assets: [
 			"antique.json", "bw.json", "cartoon.json", "centrepiece.json", "default.json",
 			"full_colour.json", "october.json", "soft.json", "grammar.json",
@@ -97,10 +107,7 @@ const MANIFESTS = {
 	},
 	cave: {
 		slug: "cave-generator", bundleDir: "to/cave-live", assetDir: "Assets",
-		js: [{ name: "Cave.js", from: "Cave.js", patch: {
-			anchor: "J.main()})(",
-			replace: 'J.main(),(typeof window!="undefined"?window:self).__maphubClasses=g})(',
-		} }],
+		js: [{ name: "Cave.js", from: "Cave.js", patch: { exposeClasses: true } }],
 		assets: [
 			"bw.json", "grammar.json", "forest_grammar.json", "moonlight.json", "parchment.json",
 			"glade_autumn.json", "glade_default.json", "glade_outline.json", "glade_reef.json", "glade_tropical.json",
@@ -125,6 +132,33 @@ async function uploadFile(dir, name, data, mime) {
 	const file = new File([data], name, { type: mime });
 	const r = await FP.upload("data", dir, file, {}, { notify: false });
 	return !!r;
+}
+
+/**
+ * Expose a Haxe generator's class registry as `window.__maphubClasses`, so the viewer
+ * can reach Serializer/Region/MapScene by fully-qualified name (see MaphubViewerApp's
+ * realm extraction). Used by the generators built on Haxe's `$hxClasses` registry —
+ * currently Perilous Shores (realm) and Cave/Glade.
+ *
+ * Resilient to Watabou's periodic rebuilds: the Haxe minifier reassigns single-letter
+ * symbols every build (Perilous Shores 1.9.0 flipped the entry class R→U), so we never
+ * hardcode them. Both are recovered from structure instead:
+ *   • registry — the variable used in (nearly) every `<var>["com.watabou.…"]=` class
+ *                registration; take the most frequent one ($hxClasses).
+ *   • entry    — `<Entry>` in the bootstrap IIFE tail `<Entry>.main()})(`.
+ * We then splice `,(…).__maphubClasses=<registry>` immediately after `<Entry>.main()`.
+ * Returns the patched source, or null if the bootstrap shape isn't recognized.
+ */
+export function exposeHaxeClasses(text) {
+	const sites = [...text.matchAll(/([A-Za-z$_][\w$]*)\["com\.watabou\.[^"]*"\]=/g)];
+	const boot = text.match(/([A-Za-z$_][\w$]*)\.main\(\)\}\)\(/);
+	// Require a single, unambiguous bootstrap call site to splice into.
+	if (!sites.length || !boot || text.split(".main()})(").length - 1 !== 1) return null;
+	const freq = {};
+	for (const m of sites) freq[m[1]] = (freq[m[1]] || 0) + 1;
+	const registry = Object.keys(freq).sort((a, b) => freq[b] - freq[a])[0];
+	const inject = `${boot[1]}.main(),(typeof window!="undefined"?window:self).__maphubClasses=${registry}})(`;
+	return text.replace(boot[0], inject);
 }
 
 export class GeneratorFetcher {
@@ -222,10 +256,18 @@ export class GeneratorFetcher {
 			if (!res.ok) throw new Error(`Could not fetch ${j.from} (${res.status}).`);
 			let text = await res.text();
 			if (j.patch) {
-				if (!text.includes(j.patch.anchor)) {
-					throw new Error(`Hook anchor not found in ${j.from} — Watabou may have updated this generator; the patch needs an update.`);
+				if (j.patch.exposeClasses) {
+					const patched = exposeHaxeClasses(text);
+					if (!patched) {
+						throw new Error(`Could not expose Haxe classes in ${j.from} — Watabou may have changed the bootstrap; the patch needs an update.`);
+					}
+					text = patched;
+				} else {
+					if (!text.includes(j.patch.anchor)) {
+						throw new Error(`Hook anchor not found in ${j.from} — Watabou may have updated this generator; the patch needs an update.`);
+					}
+					text = text.replace(j.patch.anchor, j.patch.replace);
 				}
-				text = text.replace(j.patch.anchor, j.patch.replace);
 			}
 			jsParts.push({ j, text });
 		}
@@ -267,9 +309,9 @@ export class GeneratorFetcher {
 			tick(j.name);
 		}
 
-		// 4) marker — drives isDownloaded(); records what landed + any renames.
+		// 4) marker — drives isDownloaded(); records what landed, the module rev, + any renames.
 		await uploadFile(base, MARKER, JSON.stringify({
-			type, slug: m.slug, js: m.js.map((j) => j.name), assets: savedAssets, renamed,
+			type, slug: m.slug, genRev: genRev(type), js: m.js.map((j) => j.name), assets: savedAssets, renamed,
 		}, null, 2), "application/json");
 		tick(MARKER);
 
@@ -331,5 +373,89 @@ export class GeneratorFetcher {
 		}
 		onProgress?.(types.length, types.length, "done");
 		return results;
+	}
+
+	/** Read a downloaded generator's marker JSON, or null if absent/unreadable. */
+	static async readMarker(type) {
+		try {
+			const res = await fetch(`/${this.fetchedBase(type)}/${MARKER}?cb=${this._cacheBust()}`);
+			if (!res.ok) return null;
+			return await res.json();
+		} catch { return null; }
+	}
+
+	/**
+	 * Downloaded generators whose marker revision trails the module's current GEN_REV —
+	 * i.e. the module shipped a refresh they haven't re-fetched. Returns [{type, from, to}].
+	 * Local-only: reads the on-disk marker, never polls watabou.github.io.
+	 */
+	static async staleDownloaded() {
+		const out = [];
+		for (const type of Object.keys(MANIFESTS)) {
+			const want = genRev(type);
+			if (want <= 0) continue;
+			if (!(await this.isDownloaded(type))) continue;
+			const have = Number((await this.readMarker(type))?.genRev) || 0;
+			if (have < want) out.push({ type, from: have, to: want });
+		}
+		return out;
+	}
+
+	/**
+	 * GM-only, fired once on ready: if the module shipped a generator refresh an existing
+	 * downloader hasn't fetched, offer to re-download. Gated on the `acknowledgedGenRev`
+	 * setting so a "Later" isn't re-nagged until the next module bump. No network until the
+	 * GM accepts — the stale check is purely local.
+	 */
+	static async promptStaleRefresh() {
+		if (!game.user?.isGM) return;
+		let stale;
+		try { stale = await this.staleDownloaded(); }
+		catch (e) { console.error(`${MODULE_ID} | staleDownloaded failed`, e); return; }
+		if (!stale.length) return;
+
+		const ack = game.settings.get(MODULE_ID, "acknowledgedGenRev") || {};
+		const pending = stale.filter((s) => (Number(ack[s.type]) || 0) < s.to);
+		if (!pending.length) return;
+
+		const NAMES = { realm: "Realm — Perilous Shores", dungeon: "One Page Dungeon", mfcg: "City — Medieval Fantasy City", village: "Village", dwellings: "Dwellings", cave: "Cave / Glade" };
+		const list = pending.map((s) => `<li>${NAMES[s.type] ?? s.type}</li>`).join("");
+		const DialogV2 = foundry.applications.api.DialogV2;
+		let choice = "later";
+		try {
+			choice = await DialogV2.wait({
+				window: { title: "Cartomancer — Generator update", icon: "fas fa-cloud-arrow-down" },
+				position: { width: 460 },
+				content: `<div style="line-height:1.4;">`
+					+ `<p>Cartomancer ships a refreshed build of these generator(s):</p>`
+					+ `<ul style="margin:.5rem 0;">${list}</ul>`
+					+ `<p>Re-download the latest from <code>watabou.github.io</code>? Your current copy keeps working either way.</p></div>`,
+				buttons: [
+					{ action: "update", label: "Update now", icon: "fas fa-cloud-arrow-down", default: true },
+					{ action: "later", label: "Later", icon: "fas fa-clock" },
+				],
+				rejectClose: false,
+			});
+		} catch { choice = "later"; }
+
+		if (choice !== "update") {
+			// Stop nagging for THIS rev; the next GEN_REV bump re-arms the prompt.
+			const next = { ...ack };
+			for (const s of pending) next[s.type] = s.to;
+			try { await game.settings.set(MODULE_ID, "acknowledgedGenRev", next); } catch {}
+			return;
+		}
+
+		ui.notifications.info("Cartomancer: updating generator(s)…");
+		const done = [], failed = [];
+		for (const s of pending) {
+			// A successful re-download re-stamps marker.genRev → no longer stale. A failed one
+			// stays stale and un-acked, so it re-prompts next load (retry) rather than silently sticking.
+			try { await this.downloadGenerator(s.type); done.push(s.type); }
+			catch (e) { console.error(`${MODULE_ID} | refresh ${s.type} failed`, e); failed.push(s.type); }
+		}
+		ui.notifications[failed.length ? "warn" : "info"](
+			`Cartomancer: updated ${done.length}/${pending.length} generator(s)${failed.length ? ` (failed: ${failed.join(", ")})` : ""}.`
+		);
 	}
 }
