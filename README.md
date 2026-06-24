@@ -219,7 +219,6 @@ This repository is the installed Foundry module. Foundry loads `scripts/cartoman
 | `scripts/DecorBrowserApp.mjs`     | Decor browser and tile placement UI.                                          |
 | `scripts/lib/`                    | Pure helper logic covered by Node tests.                                      |
 | `docs/generators/`                | Community guides for Watabou generator menus and recommended import settings. |
-| `test/`                           | Node unit tests, Quench integration batch, and Playwright E2E tests.          |
 
 
 
