@@ -7,7 +7,13 @@ The module is built around a practical distinction:
 - Tactical maps become playable scenes with Foundry data where possible: grids, walls, doors, levels, and stair regions.
 - Region and settlement maps become clean handout/overview scenes, with realm maps optionally aligned to a Foundry flat-top hex grid for hexcrawls.
 
-Watabou's generators are made by Oleg Dolya / [Watabou](https://watabou.itch.io) Please support his [Patron](https://www.patreon.com/cw/watawatabou)
+Watabou's generators are made by Oleg Dolya / [Watabou](https://watabou.itch.io) Please support his [Patreon](https://www.patreon.com/cw/watawatabou)
+
+## Demo
+
+<video src="https://github.com/user-attachments/assets/b612caf1-fde3-433b-9c1f-d81cdb2886ac" controls muted loop playsinline width="720">
+  <a href="https://github.com/user-attachments/assets/b612caf1-fde3-433b-9c1f-d81cdb2886ac">▶ Watch the Cartomancer demo</a>
+</video>
 
 ## Features
 
@@ -64,10 +70,15 @@ Then enable **Cartomancer — Map Generators** in your world.
 1. Log in as a GM.
 2. Open a world and activate any scene.
 3. In the left Scene Controls, use the Tokens controls group and click **Cartomancer — Map Generators** (drafting-compass icon).
+
+   ![Cartomancer launcher button](docs/launcher.png)
+
 4. Choose a generator.
 5. Adjust the map in the generator window. The guides in `docs/generators/` explain the right-click menus, keyboard shortcuts, and recommended settings.
 6. Click the visible **Import Scene** button in the generator window header.
 7. Open the new scene and check the grid, walls, doors, levels, or handout image.
+
+![Imported tactical scene with walls and grid](docs/scene-import.png)
 
 The generator window also has header actions for **Set as BG**, **Add as Tile**, **Show to Players**, **Export to Chat**, and **Save Map State**.
 
