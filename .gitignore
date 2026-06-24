@@ -2,6 +2,14 @@ node_modules/
 .DS_Store
 *.log
 
+# Local-only: testing & AI/dev tooling (untracked, kept on disk)
+/CLAUDE.md
+/dev/
+/test/
+/playwright.config.mjs
+/package.json
+/package-lock.json
+
 # Playwright (dev-only e2e tooling)
 /test-results/
 /playwright-report/
