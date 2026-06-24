@@ -2,6 +2,19 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## 0.3.1 — 2026-06-23
+
+### Changed
+- **DungeonDraft decor packs are now shared across every world.** The pack registry is
+  derived from the on-disk `_index.json` files under `Data/decor/ddpacks/` (user-data
+  level) instead of a per-world setting, so a pack imported in one world is available in
+  all of them and never needs re-uploading. Enable/disable and remove states persist into
+  each pack's `_index.json`, making them global too.
+
+### Fixed
+- **Dungeon Note pins now link to a Journal entry.** Imported One Page Dungeon scenes wire
+  each Note pin to its journal so clicking a pin opens the linked entry.
+
 ## 0.3.0 — 2026-06-22
 
 ### Added
