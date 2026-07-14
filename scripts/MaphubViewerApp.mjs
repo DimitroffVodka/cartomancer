@@ -136,7 +136,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 			let saved = false;
 			try { const r = await FP.browse("data", "maps/maphub"); saved = (r.files || []).some(f => f.split("/").pop() === fileName); } catch { saved = false; }
 			if (saved && this._mapType !== "dungeon") {
-				const res = await fetch(`${window.location.origin}/maps/maphub/${fileName}`);
+				const res = await fetch(`${window.location.origin}${foundry.utils.getRoute(`/maps/maphub/${fileName}`)}`);
 				if (res.ok) {
 					loadedJsonText = await res.text();
 					window.localStorage.setItem("_toy_town_buf_", "j" + loadedJsonText);
@@ -2669,8 +2669,10 @@ export class MaphubViewerApp extends ApplicationV2 {
 				if (fetched) return fetched;
 			}
 		} catch (e) { console.warn(`${MODULE_ID} | fetched-generator load failed; using bundled`, e); }
-		const localBase = `${window.location.origin}/${BASE}/to/${bundleDir}/index.html`;
-		const localBaseDir = `${window.location.origin}/${BASE}/to/${bundleDir}/`;
+		const localBase = `${window.location.origin}${foundry.utils.getRoute(`/${BASE}/to/${bundleDir}/index.html`)}`;
+		let routeDir = foundry.utils.getRoute(`/${BASE}/to/${bundleDir}`);
+		if (!routeDir.endsWith("/")) routeDir += "/";
+		const localBaseDir = `${window.location.origin}${routeDir}`;
 		const localParams = this._queryString ? `cb=${Date.now()}&${this._queryString}` : `cb=${Date.now()}`;
 		const localUrl = `${localBase}?${localParams}`;
 

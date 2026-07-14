@@ -326,16 +326,20 @@ export class GeneratorFetcher {
 	static async buildFetchedSrc(type, queryString) {
 		const m = MANIFESTS[type];
 		if (!m || !(await this.isDownloaded(type))) return null;
-		const baseDir = `${window.location.origin}/${this.fetchedBase(type)}/`;
+		let fetchedDir = foundry.utils.getRoute(`/${this.fetchedBase(type)}`);
+		if (!fetchedDir.endsWith("/")) fetchedDir += "/";
+		const baseDir = `${window.location.origin}${fetchedDir}`;
 		const cb = (queryString ? "&" : "") + "";
 
 		// our shipped loader
-		let html = await (await fetch(`/modules/${MODULE_ID}/scripts/maphub/${m.bundleDir}/index.html?cb=${this._cacheBust()}`)).text();
+		let html = await (await fetch(`${foundry.utils.getRoute(`/modules/${MODULE_ID}/scripts/maphub/${m.bundleDir}/index.html`)}?cb=${this._cacheBust()}`)).text();
 
 		// The loader uses ../../ relative paths (js, fonts). Under the blob's <base href>
 		// those resolve wrong, so make them absolute to the shipped module files (the fonts
 		// ship with the lean build; the js gets inlined just below).
-		html = html.split("../../").join(`/modules/${MODULE_ID}/scripts/maphub/`);
+		let maphubDir = foundry.utils.getRoute(`/modules/${MODULE_ID}/scripts/maphub`);
+		if (!maphubDir.endsWith("/")) maphubDir += "/";
+		html = html.split("../../").join(maphubDir);
 
 		// inline each fetched JS (.txt) in place of its <script src=...>
 		for (const j of m.js) {
@@ -378,7 +382,7 @@ export class GeneratorFetcher {
 	/** Read a downloaded generator's marker JSON, or null if absent/unreadable. */
 	static async readMarker(type) {
 		try {
-			const res = await fetch(`/${this.fetchedBase(type)}/${MARKER}?cb=${this._cacheBust()}`);
+			const res = await fetch(`${foundry.utils.getRoute(`/${this.fetchedBase(type)}/${MARKER}`)}?cb=${this._cacheBust()}`);
 			if (!res.ok) return null;
 			return await res.json();
 		} catch { return null; }

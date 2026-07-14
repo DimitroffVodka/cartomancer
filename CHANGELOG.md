@@ -2,6 +2,26 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## Unreleased
+
+### Fixed
+- **Bundled Maphub generator pages broke on Foundry installs served under a route prefix**
+  (e.g. `/foundry/`). Every generator page hardcoded `/modules/cartomancer/...` — the
+  classic-script `BASE` constant and the `lime.embed()` cross-generator route URLs — so a
+  prefixed install requested paths that don't exist. Each script scope now computes
+  `BASE` from `document.baseURI`, which resolves correctly both when the page is served
+  directly and inside the `<base>`-tagged blob wrapper used on Foundry 14 (which serves
+  module `.html` as `text/plain`). The classic IIFE and the `<script type="module">` are
+  isolated scopes, so each declares its own `BASE` — a single shared declaration is a
+  silent, iframe-only `ReferenceError` (the exact bug that blanked the sibling module's
+  Cave generator for weeks). Fixed pages: cave, dwellings, mfcg, village, viewer.
+- **Route prefix was also dropped by the generator URL builders.** `MaphubViewerApp`
+  (bundled-page blob URL and saved-state fetch), `GeneratorFetcher` (shipped-loader fetch,
+  `../../` asset rewrite, blob `<base href>`, marker read), and `MaphubSD` journal
+  placeholders now build URLs via `foundry.utils.getRoute()` instead of concatenating
+  `origin + "/modules/..."`. On installs without a prefix `getRoute()` is an identity
+  transform, so behavior there is unchanged.
+
 ## 0.4.0 — 2026-06-24
 
 ### Added

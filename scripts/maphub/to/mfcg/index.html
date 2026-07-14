@@ -25,7 +25,7 @@
         return _getContext.call(this, type, options);
       };
 
-      const BASE = "/modules/cartomancer/scripts/maphub";
+      const BASE = new URL('.', document.baseURI || location.href).pathname.replace(/\/to\/[^\/]+\/?$/, '');
       const RX = /^\/to\/(cave|dwellings|mfcg|village|viewer)(\/.*)?$/;
       function rewrite(url) {
         try {
@@ -72,6 +72,9 @@
   <script type="module">
     import "../../js/vendor.globals.min.js";
     import "../../js/mfcg.js";
+
+    // Module scripts can't see the IIFE-scoped BASE above — recompute it here.
+    const BASE = new URL('.', document.baseURI || location.href).pathname.replace(/\/to\/[^\/]+\/?$/, '');
 
     const _saveAs = globalThis.saveAs;
     if (_saveAs) {
@@ -125,12 +128,12 @@
         routes: {
           primary_source: { url: "watabou.github.io", type: 2 },
           github: { url: "github.com/voluminor/maphub", type: 2 },
-          homepage: { url: "/modules/cartomancer/scripts/maphub/to/mfcg/index.html", type: 1 },
-          cave: { url: "/modules/cartomancer/scripts/maphub/to/cave/index.html", type: 1 },
-          dwellings: { url: "/modules/cartomancer/scripts/maphub/to/dwellings/index.html", type: 1 },
-          mfcg: { url: "/modules/cartomancer/scripts/maphub/to/mfcg/index.html", type: 1 },
-          village: { url: "/modules/cartomancer/scripts/maphub/to/village/index.html", type: 1 },
-          viewer: { url: "/modules/cartomancer/scripts/maphub/to/viewer/index.html", type: 1 },
+          homepage: { url: BASE + "/to/mfcg/index.html", type: 1 },
+          cave: { url: BASE + "/to/cave/index.html", type: 1 },
+          dwellings: { url: BASE + "/to/dwellings/index.html", type: 1 },
+          mfcg: { url: BASE + "/to/mfcg/index.html", type: 1 },
+          village: { url: BASE + "/to/village/index.html", type: 1 },
+          viewer: { url: BASE + "/to/viewer/index.html", type: 1 },
         },
         flags: {},
         meta: {
