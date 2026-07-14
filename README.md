@@ -45,6 +45,7 @@ Watabou's generators are made by Oleg Dolya / [Watabou](https://watabou.itch.io)
 | Required modules   | None                                                   |
 | User permissions   | GM-only tools                                          |
 | Included compendia | None                                                   |
+| Route prefix       | Supported — generators work when Foundry is served under a route prefix (reverse-proxy subpath) |
 
 Cartomancer relies on Foundry's modern ApplicationV2 APIs and v13/v14 scene APIs. It is developed directly as a Foundry module in `Data/modules/cartomancer`.
 

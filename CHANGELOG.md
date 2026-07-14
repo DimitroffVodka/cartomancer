@@ -2,7 +2,7 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
-## Unreleased
+## 0.4.1 — 2026-07-14
 
 ### Changed
 - **Refreshed the bundled Perilous Shores generator to 1.9.1 "walled towns"** (was 1.9.0):
