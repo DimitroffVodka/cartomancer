@@ -4,6 +4,17 @@ All notable changes to **Cartomancer — Map Generators** are documented here.
 
 ## Unreleased
 
+### Changed
+- **Refreshed the bundled Perilous Shores generator to 1.9.1 "walled towns"** (was 1.9.0):
+  towns and cities can now generate functional defensive walls. `GEN_REV.realm` is bumped
+  1 → 2, so GMs who already downloaded the 1.9.0 build are offered a one-click re-download on
+  load. The build's minified entry class drifted (`U → S`) as it does most rebuilds;
+  `exposeHaxeClasses()` recovers it structurally, so the realm-import hook is unaffected.
+  Live-verified on FV 14.364 — the 1.9.1 build renders, a runtime re-download re-applies the
+  Haxe-class exposure cleanly, and `region2data()` extraction returns the full realm export
+  (`name`/`origin`/`bp`/`hexes`/…) with both the `Region.inst` and `MapScene.inst` location-pin
+  paths intact.
+
 ### Fixed
 - **Bundled Maphub generator pages broke on Foundry installs served under a route prefix**
   (e.g. `/foundry/`). Every generator page hardcoded `/modules/cartomancer/...` — the

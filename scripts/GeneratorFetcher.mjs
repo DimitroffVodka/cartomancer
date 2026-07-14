@@ -37,8 +37,9 @@ const MARKER = "_cartomancer.json";                   // download-complete marke
  * downloaded; on load we compare it to these and offer a refresh (see promptStaleRefresh).
  * Unlisted types are rev 0 (never prompt).
  *   realm: 1 — Perilous Shores 1.9.0 (new mountains; minifier R→U patch-anchor fix).
+ *   realm: 2 — Perilous Shores 1.9.1 (walled towns; entry class U→S, recovered structurally).
  */
-export const GEN_REV = { realm: 1 };
+export const GEN_REV = { realm: 2 };
 export const genRev = (type) => GEN_REV[type] ?? 0;
 
 const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;
