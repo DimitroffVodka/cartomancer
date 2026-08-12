@@ -97,8 +97,10 @@ function escapeHtml(s) {
  * room list rather than a wall of prose. Kept free of the characters that would break
  * a `@UUID[…]{label}` link (whose label is inserted as text, so it can't be escaped).
  */
+const UUID_LABEL_UNSAFE = /[[\]{}<>@]/g;
+
 function dungeonRoomTitle(room) {
-	const text = String(room?.text ?? "").replace(/[[\]{}<>@]/g, "").replace(/\s+/g, " ").trim();
+	const text = String(room?.text ?? "").replace(UUID_LABEL_UNSAFE, "").replace(/\s+/g, " ").trim();
 	const sentence = (text.split(/(?<=[.!?])\s/)[0] || text).trim();
 	let summary = sentence;
 	if (summary.length > 48) {
@@ -107,8 +109,10 @@ function dungeonRoomTitle(room) {
 		const sp = cut.lastIndexOf(" ");
 		summary = `${(sp > 16 ? cut.slice(0, sp) : cut).replace(/[\s,;:.]+$/, "")}…`;
 	}
-	const ref = (room?.ref != null && room.ref !== "") ? `${room.ref}. ` : "";
-	return `${ref}${summary || "Room"}`;
+	// The ref is stripped too: it lands in the same unescapable @UUID label, so a stray
+	// `}` there would terminate the label group and leak literal `@UUID[…]` markup.
+	const rawRef = (room?.ref != null && room.ref !== "") ? String(room.ref).replace(UUID_LABEL_UNSAFE, "").trim() : "";
+	return `${rawRef ? `${rawRef}. ` : ""}${summary || "Room"}`;
 }
 
 /**
@@ -415,9 +419,15 @@ export class RealmImporter {
 	 * with them, to rewrite the list as @UUID links to each room page.
 	 */
 	static _dungeonOverviewHtml(dungeonName, story, rooms, pageDocs = null) {
+		// `getData()` flattens the generator's story to its hook string, but the live
+		// controller carries the whole `{name, hook}` object — coercing that with String()
+		// would print "[object Object]" on the page, so read the hook out of it instead.
+		const desc = (typeof story === "string")
+			? story.trim()
+			: (story && typeof story === "object" ? String(story.hook ?? story.text ?? "").trim() : "");
 		const parts = [`<h2>${escapeHtml(dungeonName)}</h2>`];
-		parts.push(story
-			? `<p><em>${escapeHtml(String(story))}</em></p>`
+		parts.push(desc
+			? `<p><em>${escapeHtml(desc)}</em></p>`
 			: `<p><em>No description was generated for this dungeon.</em></p>`);
 		if (rooms.length) {
 			const byRef = new Map();
