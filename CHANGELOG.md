@@ -2,7 +2,7 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
-## Unreleased
+## 0.4.2 — 2026-08-12
 
 ### Added
 - **Dungeon journals now open with an Overview page.** It leads with the dungeon's name and
