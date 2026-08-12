@@ -2,7 +2,7 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
-## Unreleased
+## 0.4.3 — 2026-08-12
 
 ### Changed
 - **Refreshed the bundled Perilous Shores generator to 2.0.1** (was 2.0.0, the build shipped
