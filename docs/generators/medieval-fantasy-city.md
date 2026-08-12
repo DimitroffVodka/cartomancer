@@ -57,7 +57,7 @@ When you right-click an actual feature on the map, these extra items appear **ab
 
 | Item | What it does | When it shows |
 |------|--------------|---------------|
-| **Add landmark** | Places a named landmark (a marker pin) at the clicked spot, then opens a dialog to name it. If landmarks were set to *Hidden*, this automatically switches them to *Icon* mode so the new pin is visible. | Always (on a feature) |
+| **Add landmark** | Places a named landmark (a marker pin) at the clicked spot, then opens a dialog to name it. If landmarks were set to *Hidden*, this automatically switches them to *Icon* mode so the new pin is visible. | Always — in 0.11.5 it also heads the plain map-background menu, not just the feature menu |
 | **Reroll geometry** | Regenerates just this ward's internal layout (its streets and building shapes) while keeping the rest of the city untouched. Handy for fixing an ugly or empty-looking block. | Only on wards that can be rerolled |
 | **Open in Dwellings** | Opens the clicked building/lot in Watabou's **Dwellings** generator so you can produce a detailed floor plan for that exact footprint. The building's shape and a "tall" hint are passed along, so you get a multi-floor interior matching the building you clicked. | Only when **Display mode** shows individual buildings (i.e. *Lots* or *Complex*) — never in *Block* mode |
 | **Zoom in** | Enters **District View**: the clicked district fills the screen and the rest of the city is hidden. | Only when you click a district |
@@ -242,7 +242,8 @@ The dialog also has **Load / Save / Preset** buttons so you can save a color sch
 | `5` | Natural color scheme |
 | `6` | Modern color scheme |
 | `A` | Toggle alleys |
-| `B` | Cycle building display mode (`Shift+B` opens the Buildings style tab) |
+| `B` | Open the Buildings style tab |
+| `Shift+B` | Cycle building display mode (e.g. Lots → Hidden) |
 | `D` | Toggle the grid |
 | `E` | Open the Elements style tab |
 | `L` | Cycle district-label mode (Curved → Legend → Hidden → Straight) |

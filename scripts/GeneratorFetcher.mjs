@@ -38,8 +38,12 @@ const MARKER = "_cartomancer.json";                   // download-complete marke
  * Unlisted types are rev 0 (never prompt).
  *   realm: 1 — Perilous Shores 1.9.0 (new mountains; minifier R→U patch-anchor fix).
  *   realm: 2 — Perilous Shores 1.9.1 (walled towns; entry class U→S, recovered structurally).
+ *   realm: 3 — Perilous Shores 2.0.1 (saving/loading rework; entry class S→R, registry h).
+ *              Watabou's build metadata (`meta.h.version`) is the version of record here —
+ *              the build we shipped as devlog "1.9.1" already reported 2.0.0, and 2.0.1 has
+ *              no devlog entry at all.
  */
-export const GEN_REV = { realm: 2 };
+export const GEN_REV = { realm: 3 };
 export const genRev = (type) => GEN_REV[type] ?? 0;
 
 const FilePickerImpl = () => foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;

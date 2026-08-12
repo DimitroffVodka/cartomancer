@@ -19,7 +19,7 @@ Core actions:
 | What you want | How to do it |
 |---------------|--------------|
 | Generate a brand-new village | Right-click → **New village**, or **double-click** / **Shift+click** on the map |
-| Reroll the current village (same settings) | Press **Enter**, or right-click → **Reroll village** |
+| Reroll the current village (same settings) | Press **Shift+Enter**, or right-click → **Reroll village** |
 | Pan around | Click-and-drag the map |
 | Zoom | Scroll wheel (or pinch on touch) |
 
@@ -160,7 +160,8 @@ Beyond the tabs, the palette also drives things like ink/linework color, paper c
 | Key | Action |
 |-----|--------|
 | `Tab` | Open Parameters / Tags dialog |
-| `Enter` | Reroll village |
+| `Enter` | New village |
+| `Shift+Enter` | Reroll the current village (keeps its parameters) |
 | `0` | Random style |
 | `1` | Default style |
 | `2` | Sand style |

@@ -2,6 +2,61 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## Unreleased
+
+### Changed
+- **Refreshed the bundled Perilous Shores generator to 2.0.1** (was 2.0.0, the build shipped
+  under the "1.9.1 walled towns" devlog): Watabou's 2.0 line reworks saving and loading.
+  `GEN_REV.realm` is bumped 2 → 3, so GMs who already downloaded the older build are offered a
+  one-click re-download on load. The minified entry class drifted again (`S → R`) as it does
+  most rebuilds; `exposeHaxeClasses()` recovers it structurally, so the realm-import hook is
+  unaffected. This also matters more than a stale bundle usually would — the fetch path pulls
+  the *live* build unpinned, so GMs downloading today already get 2.0.1.
+  Live-verified on FV 14.365: a runtime `downloadGenerator("realm")` re-applies the Haxe-class
+  exposure to the new build (16 files, 14/14 assets, marker re-stamped to rev 3), the fetched
+  build renders, and `region2data()` extraction returns the full realm export
+  (`name`/`origin`/`bp`/`layout`/`hexes`/`rivers`/`roads`/`searoutes`/`features`). Both
+  location paths survive the rebuild too — `parseRealmLocations()` read 9 linked locations and
+  `Region.inst.getFeatures()` + `MapScene.inst.view` produced 12 map-pin positions.
+
+### Documentation
+- **Rewrote the Perilous Shores guide for the 2.0 UI.** 2.0 restructured the interface and
+  renamed a lot of controls, so the 1.9-era walkthrough no longer matched the generator:
+  the *Grid* and *Details* submenus are now tabbed **windows** (`G` / `D`); *Vantage…* left the
+  right-click menu and is the `V` shortcut; **Save** / **Load** joined the menu; `G` opens the
+  Grid window instead of toggling the grid (`Shift+G` does that now); `N` opens Toponymy while
+  `Shift+N` rerolls names; `T`/`F` open Details tabs while `Ctrl+T`/`Ctrl+F` do the old reroll
+  and cycle; and *Massifs → High mountains*, *Individual trees → Discrete trees*,
+  *Rugged → Rugged coastline*, *Meadows/Dangers → Show meadows/Show dangers*. Also documented
+  the new **Walls** toggle and corrected the claim that there is "no import-back" into Perilous
+  Shores — 2.0 loads its own JSON. Verified against the running 2.0.1 build, not the release
+  notes.
+- **Audited the other five generator guides against their live builds** — driving each
+  generator's UI in the viewer and reading its keycode handlers and persisted defaults out of
+  the build, rather than trusting devlogs. Fixes:
+  - **Cave / Glade (2.1.7):** `W` opens the wall-geometry dialog and `Shift+W` toggles it (the
+    guide had them the other way round); added the undocumented `D` (doors), `X` (exits),
+    `H` (shading) and `0` (random palette); palette presets are `1`–`3` in Cave mode and
+    `1`–`5` in Glade mode, not "Glade only"; and **Style…** / **Display ▸** appear in Cave mode
+    too, which the guide said were Glade-only.
+  - **City / MFCG (0.11.5):** `B` opens the Buildings style tab and `Shift+B` cycles the
+    building display mode — the guide had these inverted (verified live by watching
+    `display_mode` flip Lots → Hidden).
+  - **Village (1.6.6):** `Enter` generates a **new** village; rerolling the current one is
+    `Shift+Enter`. The guide told readers to press `Enter` to reroll, in two places.
+  - **Dwellings (1.4.2):** the keyboard section was missing most of the plan-view bindings —
+    added the `6`–`9`/`0` architecture presets, the `G` / `Shift+G` / `Ctrl+G` grid keys
+    (including **Double grid**, which the Foundry import aligns to), `D` doors, `A` arrows,
+    `P` props, `L` lights, `O` ambient occlusion, `F` fading, `X` multi-floor export and the
+    arrow-key floor navigation, and corrected `R` (room labels in Plan view, reroll dimensions
+    in Elevation view).
+  - **One Page Dungeon (1.2.7):** checked, no changes — its menu and every shortcut still match
+    the build.
+- Recorded how to tell when Watabou ships a new generator build: the Lime app metadata
+  (`meta.h.version`) embedded once per build is the version of record. GitHub Pages'
+  `Last-Modified`/`ETag` are useless (every file carries the site-wide deploy stamp), and the
+  itch.io devlog titles lag the build metadata.
+
 ## 0.4.2 — 2026-08-12
 
 ### Added

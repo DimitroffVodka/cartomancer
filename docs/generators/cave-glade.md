@@ -53,15 +53,19 @@ Tags...
 ──────────────
 Grid          ▸
 Shape         ▸
-Display       ▸   (Glade mode only)
-Style...          (Glade mode only)
+Display       ▸
+Style...
 ──────────────
 Export as     ▸
 ```
 
-The **Display** submenu and the **Style...** item only appear when you're in
-**Glade mode** (toggle modes with the `F` key — see [Cave vs. Glade mode](#cave-vs-glade-mode)).
-Everything else is always available.
+`Rename...` and `Reroll` are context items — they appear when you right-click on
+or near the map's title.
+
+> **Checked against 2.1.7:** **Style...** and the **Display** submenu appear in
+> **Cave** mode too, not only in Glade mode as earlier builds had it. The *contents*
+> of Display still differ between the two modes (toggle modes with `F` — see
+> [Cave vs. Glade mode](#cave-vs-glade-mode)).
 
 ### Top-level items
 
@@ -255,16 +259,22 @@ presets.
 | `F` | Toggle Cave ↔ Glade mode |
 | `G` | Cycle grid: Square → Hexagonal → Hidden |
 | `Shift` + `G` | Open the grid Customize dialog (Square grid only) |
-| `W` | Toggle wall geometry (distortion + bumpiness + roughness on/off) |
-| `E` | Toggle even / bumpy walls |
+| `W` | Open the wall-geometry dialog |
+| `Shift` + `W` | Toggle wall geometry (distortion + bumpiness + roughness) on/off |
+| `E` | Cave: toggle even / bumpy walls · Glade: toggle edge detail |
 | `M` | Toggle smooth / rough walls |
 | `N` | Toggle narrow tunnels |
+| `D` | Toggle doors |
+| `X` | Toggle exits |
+| `H` | Toggle shading |
 | `[` | Lower the water level |
 | `]` | Raise the water level |
 | `R` | Open the Rotate dialog |
-| `S` | Open the Style dialog (Glade mode only) |
+| `S` | Open the Style dialog |
 | `T` | Show / hide the map title |
-| `1`–`5` | Load a style / palette preset (Glade mode only) |
+| `0` | Random palette |
+| `1`–`3` (Cave) | Palette presets: parchment, moonlight, B&W |
+| `1`–`5` (Glade) | Palette presets: default, tropical, autumn, outline, reef |
 
 ---
 

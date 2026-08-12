@@ -35,19 +35,25 @@ On **desktop**, the right-click context menu is the primary interface — almost
 
 This is the heart of the generator. Right-clicking the background opens the **global menu** below. If your cursor is over a land cell or an existing feature, extra context-specific items appear *above* these.
 
+> **Restructured in 2.0.** The *Grid* and *Details* submenus became standalone tabbed
+> **windows**, *Vantage…* left the menu entirely (it's the `V` shortcut now), and **Save** /
+> **Load** were added for the new JSON save-and-load. This guide describes **2.0.1**.
+
 | Menu item | What it does |
 |-----------|--------------|
+| **Procgen Arcana** | Link back to the generator hub. |
 | **New region** | Generates a fresh region using random parameters. The fastest way to roll again. |
-| **Parameters…** | Opens the generation dialog: map size, hex layout, and the tag buttons that shape the region (see [Settings & parameters](#settings--parameters)). |
+| **Parameters…** | Opens the *Region parameters* dialog: map size, hex layout, and the tag buttons that shape the region (also `P` — see [Settings & parameters](#settings--parameters)). |
 | **Blueprint…** | Opens the land/water painting editor so you can draw the coastline/landmass yourself before generating (see [Blueprint editor](#blueprint-editor)). |
 | **Rotate ▸** | Rotates or flips the whole map (see below). |
-| **Style…** | Opens the palette/style editor — colors, line weights, fonts, presets (see [Style editor](#style-editor)). |
-| **Vantage…** | Switches between top-down and tilted/side-on projection (see below). |
-| **Grid ▸** | Controls the hex grid: hidden/under/above, ocean tiles, hex numbers, and a Customize dialog (see [Grid submenu](#grid-submenu)). |
-| **Details ▸** | Toggles for terrain, towns, dangers, meadows, trees, rivers, farmlands, plus the Towns dialog (see [Details submenu](#details-submenu)). |
+| **Style** | Opens the palette/style editor — colors, line weights, fonts, presets (see [Style editor](#style-editor)). |
+| **Details** | Opens the **Details window** — three tabs of terrain/settlement toggles (see [Details window](#details-window)). |
+| **Grid** | Opens the **Grid window** — hex-grid mode and appearance, in two tabs (see [Grid window](#grid-window)). |
 | **Labels ▸** | How feature names are drawn (hidden/straight/arced/curved), plus naming language and name reroll (see [Labels submenu](#labels-submenu)). |
 | **Elements ▸** | Decorative overlays: title header, frame matte, compass, descriptions, clouds, dramatic light (see [Elements submenu](#elements-submenu)). |
-| **Export as ▸** | Save the map as PNG, SVG, or JSON (see [Export & sharing](#export--sharing)). |
+| **Save** | Saves the map as a JSON file (2.0). |
+| **Load** | Loads a map back from a JSON file (2.0) — see [Export & sharing](#export--sharing). |
+| **Export as ▸** | Exports the map as PNG, SVG, or JSON (see [Export & sharing](#export--sharing)). |
 
 ### Context-specific items (over a feature or land cell)
 
@@ -62,77 +68,92 @@ Rotates or mirrors the entire region. Note that rotation/flipping isn't saved in
 
 | Option | Effect |
 |--------|--------|
-| **Rotate 180°** | Turns the map upside down. |
-| **Rotate 90° CW / CCW** | Quarter turns. Only available when **Vantage** is top-down (1.0). |
-| **Flip horizontally / vertically** | Mirrors the map left↔right or top↔bottom. (These work in the main generator. Note: the *same* items inside the Blueprint editor are present but not yet functional.) |
+| **180°** | Turns the map upside down. |
+| **90° CW / 90° CCW** | Quarter turns. Only available when the vantage point is top-down (1.0). |
+| **Flip H / Flip V** | Mirrors the map left↔right or top↔bottom. (These work in the main generator. Note: the *same* items inside the Blueprint editor are present but not yet functional.) |
 
-### Vantage…
+### Vantage point (`V`)
+
+**As of 2.0 this is no longer in the right-click menu** — press `V` to open the *Vantage point*
+dialog.
 
 Controls the projection. **1.0 is straight top-down.** Lowering the value vertically squashes the map toward an oblique/side-on view for a more illustrative look. The practical minimum is around **0.5** (lower values glitch).
 
 > Tip: a tilted vantage looks great but distorts the grid, so 90° rotation is disabled and the map no longer lines up cleanly with a real hex grid. Keep vantage at 1.0 if you need accurate hex alignment.
 
-### Grid submenu
+### Grid window
 
-The grid draws dashed lines along the hex edges.
+The grid draws dashed lines along the hex edges. **In 2.0 the Grid submenu and its Customize
+dialog became one window** (right-click → **Grid**, or press `G`) with two tabs. `Shift+G` still
+toggles the grid straight from the keyboard without opening anything.
+
+**Options tab**
 
 | Item | What it does |
 |------|--------------|
 | **Hidden** | No grid drawn. |
 | **Under** | Grid drawn beneath terrain and features. |
 | **Above** | Grid drawn on top of everything. |
-| **Ocean tiles** | Also draws grid lines over water hexes. (By default only land hexes are gridded, for a cleaner look. If the grid is hidden when you enable this, it switches to *Under* automatically.) |
-| **Numbers** | Shows a coordinate number in each hex (column + row, zero-padded; zeros are shown as the letter `O` for readability — e.g. column 3, row 12 reads `O312`). |
-| **Customize…** | Opens the **Grid parameters** dialog (below). |
+| **Ocean tiles** | Also draws grid lines over water hexes. (By default only land hexes are gridded, for a cleaner look. Greyed out while the grid is hidden.) |
+| **Show numbers** | Shows a coordinate number in each hex (column + row, zero-padded; zeros are shown as the letter `O` for readability — e.g. column 3, row 12 reads `O312`). Greyed out while the grid is hidden. |
 
-**Grid parameters dialog**
+**Style tab** (was the *Customize… → Grid parameters* dialog)
 
 | Control | Default | What it does |
 |---------|---------|--------------|
 | **Use ink color** | Off | When on, grid lines and numbers use the map's ink/foreground color instead of the custom color, and the Color field is disabled. |
 | **Color** | Cyan (`#00CCFF`) | Color of grid lines/numbers. Click the swatch for a color picker. |
-| **Grid opacity** | 0.4 | How visible the grid layer is (0 = invisible, 1 = fully opaque). |
+| **Opacity** | 0.4 | How visible the grid layer is (0 = invisible, 1 = fully opaque). |
 | **Numbers size** | 14 | Hex-number font size (8–18). |
-| **Numbers position** | Top | Where the number sits in each hex: Top, Bottom, or Center. (Exact placement also depends on the hex mode.) |
-| **Reset** | — | Restores all grid defaults. |
+| **Numbers pos** | Top | Where the number sits in each hex: Top, Bottom, or Center. (Exact placement also depends on the hex mode.) |
+| **Reset** / **Apply** | — | Restore all grid defaults / commit the current values. |
 
-### Details submenu
+### Details window
 
-Toggles for terrain detail and the Towns dialog. A checkmark means the toggle is on.
+**In 2.0 the Details submenu and the Towns dialog became one window** (right-click →
+**Details**, or press `D`) with three tabs — **Towns**, **Forests**, **Misc.** A filled box means
+the toggle is on. `T` and `F` jump straight to the Towns and Forests tabs.
+
+Several toggles were also **renamed** in 2.0 (old name in parentheses below), so a 1.9-era
+walkthrough will not match what you see.
+
+**Misc. tab**
 
 | Item | What it does | Default |
 |------|--------------|---------|
-| **Rugged** | Mountains get jagged, broken outlines (fantasy look) vs. smooth. Note: this **regenerates the whole region**, so it's slower than the other toggles. | On |
-| **Massifs** | Draws the newer "super-mountains" (1.9.0): denser, larger ranges, with individual peaks growing the further they sit from their range's edge — more dramatic on big maps and with the **highland** tag. Uncheck to fall back to the older, smaller mountains. (The old "smooth" mountains — see *Rugged* — look odd with Massifs on.) | On |
-| **Towns…** | Opens the Towns dialog (below). | — |
-| **Dangers** | Shows/hides danger markers (dungeons, hazards). | On |
-| **Meadows** | Shows/hides small decorative grass/field sprites in open terrain. | On |
-| **Individual trees** | Draws each tree as a separate sprite (detailed but noisier). Off draws forests as soft "blob" masses. | Off |
-| **Front trees** | Adds trees along the bottom edge of forest blobs for a pseudo-3D feel. Only available when *Individual trees* is **off**. | On |
+| **Rugged coastline** (was *Rugged*) | Mountains get jagged, broken outlines (fantasy look) vs. smooth. Note: this **regenerates the whole region**, so it's slower than the other toggles. Also `A`. | On (set by the style preset — `ruggedMountains`) |
+| **High mountains** (was *Massifs*) | Draws the newer "super-mountains" (1.9.0): denser, larger ranges, with individual peaks growing the further they sit from their range's edge — more dramatic on big maps and with the **highland** tag. Uncheck to fall back to the older, smaller mountains. (The old "smooth" mountains — see *Rugged coastline* — look odd with this on.) | On |
+| **Show meadows** (was *Meadows*) | Shows/hides small decorative grass/field sprites in open terrain. | On |
+| **Show dangers** (was *Dangers*) | Shows/hides danger markers (dungeons, hazards). | On |
+| **Simple rivers** | On = single-stroke rivers; off = "hollow"/complex rivers with internal fill and varied width and bolder outlines. | Off (complex) |
+| **Shade banks** | Adds subtle inner shading along river banks. | On |
+
+**Forests tab**
+
+| Item | What it does | Default |
+|------|--------------|---------|
+| **Discrete trees** (was *Individual trees*) | Draws each tree as a separate sprite (detailed but noisier). Off draws forests as soft "blob" masses. Also `I`. | Off |
+| **Front trees** | Adds trees along the bottom edge of forest blobs for a pseudo-3D feel. Only available when *Discrete trees* is **off**. | On |
 | **Edge trees** | Adds trees along forest edges (works in either tree mode). | Off |
 | **Shadows** | Tree sprites cast small shadows. | Off |
-| **Reveal rivers** | Forces rivers to stay visible through forest blobs. Only available when *Individual trees* is **off**. | Off |
-| **Forest type ▸** | Choose forest character: **Varied**, **Light**, **Dark**, or **Dead** (mutually exclusive). Note: *Dead* woods always draw as individual trees even when *Individual trees* is off. | Varied |
-| **Simple rivers** | On = single-stroke rivers; off = "hollow"/complex rivers with internal fill and varied width and bolder outlines. | Off (complex) |
-| **Shade banks** | Adds subtle inner shading along river banks. | Off |
-| **Farmlands** | Tiny field/furrow strokes around settlement cells and the empty cells near towns/cities. | On |
+| **Reveal rivers** | Forces rivers to stay visible through forest blobs. Only available when *Discrete trees* is **off**. | On |
+| **Varied / Light / Dark / Dead** (was the *Forest type ▸* submenu) | Forest character, mutually exclusive. Note: *Dead* woods always draw as discrete trees even when *Discrete trees* is off. `Ctrl+F` cycles them. | Varied |
 
-**Towns dialog** (`Details ▸ Towns…`, or press `T`)
-
-This dialog also groups several settlement-overlay toggles that live here rather than in the main Details list.
+**Towns tab** (was the *Towns dialog*; `T`)
 
 | Control | Default | What it does |
 |---------|---------|--------------|
 | **Hidden / Icons / Pins** | Icons | How settlements are drawn (radio group): hidden, building icons, or map pins. With **Pins**, Suburbs and Reroll are disabled. |
-| **Outline** | Off | Draws outline strokes around town icons. |
+| **Outline** | On | Draws outline strokes around town icons. |
 | **Uniform** | Off | On = all towns share one architectural style; off = each town can look different. |
 | **Heraldic** | Off | Makes town icons schematic — flat, emblem-like symbols without the fake-perspective 3D effect (1.9.0). |
-| **Reroll** | — | Randomizes the currently shown town icons (architecture). |
+| **Reroll** | — | Randomizes the currently shown town icons (architecture). `Ctrl+T` does the same from the keyboard. |
+| **Walls** | On | Draws defensive walls around towns and cities that have them (1.9.1). 2.0 gave the walls a cleaner, more correct shape and more detailed gates. |
 | **Suburbs** | On | Shows tiny suburban houses (and the occasional windmill) around settlements. |
-| **Fields** | Off | Shows farm fields around settlements. |
+| **Fields** | Off | Shows farm fields — the tiny field/furrow strokes around settlement cells and the empty cells near towns and cities. |
+| **Harbours** | On | Shows lighthouses on coastal settlements that have enough sea routes leaving them; each lighthouse mirrors its town's style (1.9.0). 2.0 spawns slightly fewer of them and keeps them from visually merging with neighbouring city icons. Uncheck to hide them. |
 | **Roads** | On | Shows roads connecting settlements. |
 | **Sea routes** | Off | Shows dotted sea routes on the water. |
-| **Harbours** | On | Shows lighthouses on coastal settlements that have enough sea routes leaving them; each lighthouse mirrors its town's style (1.9.0). Uncheck to hide them. |
 
 > **Settlement icons (1.9.0):** city icons were reworked. **Heraldic** gives a flatter, emblem-like look (no fake perspective), coastal towns can sport **lighthouses** (toggle **Harbours**), and flags are drawn more prominently — groundwork for per-kingdom flag colors. Roads also render more cleanly.
 
@@ -264,18 +285,24 @@ Most of these mirror right-click menu items.
 | `Shift+Enter` | Return the current map to its original (session history) |
 | `Ctrl/Cmd+Z` | Restore the previous map (session history) |
 | `B` | Open the Blueprint editor |
+| `P` | Open the Region parameters dialog |
 | `S` | Open the Style editor |
-| `G` | Toggle grid (Hidden ↔ Under) |
-| `N` | Toggle hex numbers |
-| `Shift+N` | Open the Toponymy dialog |
+| `D` | Open the **Details** window (2.0) |
+| `G` | Open the **Grid** window (2.0 — it no longer toggles the grid) |
+| `Shift+G` | Toggle the grid (what plain `G` used to do) |
+| `V` | Open the **Vantage point** dialog (2.0 — it left the right-click menu) |
+| `N` | Open the Toponymy dialog |
+| `Shift+N` | Reroll all names |
 | `L` | Cycle label mode (Hidden → Straight → Arced → Curved) |
-| `A` | Toggle Rugged mountains |
-| `T` | Open the Towns dialog |
-| `I` | Toggle Individual trees |
-| `F` | Cycle Forest type (Varied → Light → Dark → Dead) |
+| `A` | Toggle Rugged coastline |
+| `T` | Open Details on the **Towns** tab |
+| `Ctrl+T` | Reroll town icons |
+| `F` | Open Details on the **Forests** tab |
+| `Ctrl+F` | Cycle Forest type (Varied → Light → Dark → Dead) |
+| `I` | Toggle Discrete trees |
 | `H` | Cycle shading mode (Hatching → Transparent → Solid → None) |
 | `O` | Toggle "No outlines" shading |
-| `C` | Open the Compass customize dialog (turns the compass on if off) |
+| `C` | Toggle the compass (`Shift+C` opens its customize dialog) |
 | `M` | Toggle the frame matte |
 | `Y` | Toggle dramatic light (`Shift+Y` opens its dialog) |
 | `` ` `` | Default style preset |
@@ -306,7 +333,21 @@ Open **Export as ▸** from the right-click menu.
 |--------|----------|-------|
 | **PNG** | Quick image use — wallpapers, scene backgrounds, handouts. | A flat raster image at the map's pixel size. Whatever you see (style, labels, light, matte) is baked in. |
 | **SVG** | Scalable/printable vector art and editing in vector tools. | Resolution-independent. Recent versions also embed tooltips with feature names, so names survive even when on-map labels are hidden. |
-| **JSON** | Reusing the map's *data* in other tools. | Exports the structured map (terrain per hex including explicit `water` hexes, rivers as hex-edge pairs, settlements, dangers, landmarks, names, descriptions/touchstones). The format is based on HexJSON. Useful for the **HexView** viewer and third-party importers. There is currently **no import-back** into Perilous Shores. |
+| **JSON** | Reusing the map's *data* in other tools. | Exports the structured map (terrain per hex including explicit `water` hexes, rivers as hex-edge pairs, settlements, dangers, landmarks, names, descriptions/touchstones). The format is based on HexJSON. Useful for the **HexView** viewer and third-party importers. |
+
+### Save & load (2.0)
+
+Perilous Shores can now **load a map back from a JSON file** — the feature that shipped as 2.0.0
+"saving and loading". The right-click menu gained two top-level items:
+
+| Item | What it does |
+|------|--------------|
+| **Save** | Writes the current map to a `.json` file (the same structured export as *Export as ▸ JSON*). |
+| **Load** | Reads such a file back and restores the map. Its file picker filters on *Exported maps*; a file that isn't a valid map is rejected with **"Invalid JSON."** |
+
+This is what the old "export / import" wording in the UI became — 2.0.0 renamed those terms to
+**save / load**. It also means a JSON you exported from an older version is your durable copy of
+a map, in a way permalinks never were.
 
 > About JSON fidelity: warped-hex maps keep rotation info but lose exact warping, and the rendered coastline is intentionally smoothed away from the strict hex outline — so a JSON re-render may not perfectly match the original image.
 
@@ -400,7 +441,7 @@ A Perilous Shores realm is a region/world map — and Cartomancer imports it as 
 - For resolution, set a large **Size preset** in **Parameters…** before generating — **Large (1800)** or **Huge (2700)**. A bigger map captures sharper.
 - You don't need to touch the hex mode — Cartomancer sets flat-top for you. (Switch to **Pointy topped** and the import follows it with a pointy Foundry hex grid; **Warped** falls back to a plain gridless image.)
 - Trim clutter to taste: **Labels**, and under **Elements** the **Descriptions**, **Compass**, **Matte**, and **Clouds** overlays. A clean style preset (**Default**, **Antique**, **Soft**) imports well.
-- **The new larger mountains (Details ▸ Massifs, 1.9.0) can crowd roads and settlements.** If they hide the towns in your capture, disable **Massifs** or set the **Towns** dialog to **Pins** before importing.
+- **The larger mountains (Details `D` ▸ Misc. ▸ High mountains — called *Massifs* before 2.0) can crowd roads and settlements.** If they hide the towns in your capture, disable **High mountains** or set **Details ▸ Towns** to **Pins** before importing.
 - Turn on **hex numbers** (`N`) if you want the generator's coordinates baked into the image for referencing.
 - To import individual locations *as their own scenes*, use the realm's location journals (**Generate this map**) rather than capturing the whole region — see the module's realm-import flow.
 
@@ -412,8 +453,8 @@ A Perilous Shores realm is a region/world map — and Cartomancer imports it as 
 - **Reroll names, don't regenerate.** If you like the *map* but not the *names*, use `Labels ▸ Reroll names` (it keeps the terrain). Regenerating gives you a whole new map.
 - **Keep a map with a permalink.** Copy the URL to bookmark a base map you can return to — but remember it won't preserve blueprints, rotation, or local style/grid preferences.
 - **For VTT/hex alignment, use Pointy or Flat hexes at vantage 1.0.** Warped hexes and tilted vantages look great but won't line up with a real hex grid, and rotation is disabled below vantage 1.0.
-- **Turn on hex numbers** (`N`) for hexcrawl referencing — each hex gets a coordinate you can cite in notes and tables.
-- **Cleaner exports:** turn off clouds, matte, dramatic light, suburbs, fields, and farmlands; set Labels to **Straight** (or **Hidden** if you'll add your own); and consider **Individual trees off** with a **Dark** forest type for readable woods.
+- **Turn on hex numbers** (Grid window `G` ▸ Options ▸ **Show numbers**) for hexcrawl referencing — each hex gets a coordinate you can cite in notes and tables.
+- **Cleaner exports:** turn off clouds, matte, dramatic light, suburbs, and fields; set Labels to **Straight** (or **Hidden** if you'll add your own); and consider **Discrete trees off** with a **Dark** forest type for readable woods.
 - **Hidden labels hide everything.** "Hidden" turns off both point labels (towns/dangers) and area labels — it's all-or-nothing, which can be surprising.
 - **Want a label even when labels are hidden?** SVG export embeds feature names as tooltips, so names survive a label-free image.
 - **Use the Blueprint image import for custom worlds.** Sketch a black-on-white landmass in any paint program and load it as a mask — instant custom coastline, fully terrain-generated.

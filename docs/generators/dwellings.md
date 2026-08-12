@@ -233,15 +233,25 @@ When two conflicting tags are selected, the generator resolves the conflict for 
 |-----|--------|
 | `Enter` | Generate a new building |
 | `Space` | Show the building's name |
-| `1` | Natural color scheme |
-| `2` | Wooden color scheme |
-| `3` | Plain color scheme |
-| `4` | Blueprint color scheme |
-| `5` | Black & white color scheme |
 | `Tab` or `T` | Open Parameters / Tags |
 | `S` | Open the Style dialog |
 | `E` | Switch to Elevation view |
 | `B` | Switch to the Blueprint editor |
+| `1`–`5` | Colour presets: Natural, Wooden, Plain, Blueprint, B&W |
+| `6`–`9`, `0` | Architecture presets: Simple, Castle, Logs, Modern, Sci-fi |
+| `G` | Cycle the grid mode |
+| `Shift+G` | Show / hide the grid |
+| `Ctrl+G` | Toggle **Double grid** (the half-size grid Cartomancer's import can align to) |
+| `D` | Cycle how doors are drawn (hidden / …) |
+| `A` | Toggle direction arrows |
+| `P` | Toggle props (furniture) |
+| `L` | Toggle lights |
+| `O` | Toggle ambient occlusion |
+| `F` | Toggle the fade effect |
+| `R` | Toggle room labels |
+| `X` | Export every floor at once |
+| `→` / `↑` | Next floor |
+| `←` / `↓` | Previous floor |
 
 **Elevation view:**
 
@@ -253,6 +263,10 @@ When two conflicting tags are selected, the generator resolves the conflict for 
 | `F` | Toggle fade effect |
 | `E` | Switch back to Plan view |
 | `B` | Switch to the Blueprint editor |
+
+> The same key can mean different things per view — `R` rerolls dimensions in
+> Elevation view but toggles room labels in Plan view, and `B` leaves the Blueprint
+> editor (discard) rather than entering it.
 
 ---
 
