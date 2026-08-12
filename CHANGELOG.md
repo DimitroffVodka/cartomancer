@@ -2,6 +2,30 @@
 
 All notable changes to **Cartomancer — Map Generators** are documented here.
 
+## Unreleased
+
+### Added
+- **Dungeon journals now open with an Overview page.** It leads with the dungeon's name and
+  the generator's own description (the "hook"), then indexes every room as a link to that
+  room's page. The room index is written in a second pass after the entry is created, since
+  a `@UUID` link needs page ids that don't exist until then. Previously an overview page was
+  only created when the generator happened to produce a description, carried no heading, and
+  never linked anything.
+- The journal is also built when a dungeon imports with **no** numbered rooms at all. It
+  used to be skipped entirely unless the scene ended up with Note pins, so a dungeon's
+  description could be silently dropped.
+
+### Changed
+- **Imported dungeons are named after the dungeon, not `Dungeon Map <timestamp>`.** The One
+  Page Dungeon export exposes the generated name as `title` (the generator's `story.name` —
+  the same string printed at the top of the page), and both the scene and its journal now
+  take it. The timestamp label remains as a fallback for when the name can't be read.
+  Realm-location dungeons are unaffected: they keep the name the realm gave the location.
+- **Room pages sort in room order.** Pages created in one batch all shared `sort: 0`, which
+  left the sheet's room order up to document-id ordering; each room page now carries an
+  explicit sort key. Page titles are also built from the first *sentence* of the room
+  description with an ellipsis, rather than the first line hard-cut at 60 characters.
+
 ## 0.4.1 — 2026-07-14
 
 ### Changed

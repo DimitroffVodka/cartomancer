@@ -92,6 +92,26 @@ function escapeHtml(s) {
 }
 
 /**
+ * Plain-text page title for a dungeon room: "3. A collapsed shrine to a dead god".
+ * Built from the first sentence of the room's description so the sidebar reads as a
+ * room list rather than a wall of prose. Kept free of the characters that would break
+ * a `@UUID[…]{label}` link (whose label is inserted as text, so it can't be escaped).
+ */
+function dungeonRoomTitle(room) {
+	const text = String(room?.text ?? "").replace(/[[\]{}<>@]/g, "").replace(/\s+/g, " ").trim();
+	const sentence = (text.split(/(?<=[.!?])\s/)[0] || text).trim();
+	let summary = sentence;
+	if (summary.length > 48) {
+		// Break on the last word boundary, not mid-word ("…the land aroun…").
+		const cut = summary.slice(0, 48);
+		const sp = cut.lastIndexOf(" ");
+		summary = `${(sp > 16 ? cut.slice(0, sp) : cut).replace(/[\s,;:.]+$/, "")}…`;
+	}
+	const ref = (room?.ref != null && room.ref !== "") ? `${room.ref}. ` : "";
+	return `${ref}${summary || "Room"}`;
+}
+
+/**
  * A journal link that VIEWS (loads) a scene on click — handled by the delegated
  * listener in registerHooks(). A plain @UUID[Scene] link only opens the scene's
  * config sheet (and on some sheets appears to do nothing), which isn't what
@@ -331,54 +351,90 @@ export class RealmImporter {
 
 	/**
 	 * Build a standalone dungeon JournalEntry from a One Page Dungeon JSON: an
-	 * optional story/overview page plus one text page per numbered room. Each room
-	 * page is tagged with its note `ref`, so the scene's numbered Note pins can
-	 * deep-link to the matching page. Returns `{ je, pageByRef }` (ref → pageId).
+	 * Overview page carrying the dungeon's own description, plus one text page per
+	 * numbered room. Each room page is tagged with its note `ref`, so the scene's
+	 * numbered Note pins can deep-link to the matching page, and the Overview gets a
+	 * room index of @UUID links (filled in after creation, once page ids exist).
+	 * Returns `{ je, pageByRef }` (ref → pageId).
 	 */
 	static async createDungeonJournal(name, dungeonJson, { folderId = null } = {}) {
 		let d = dungeonJson;
 		if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } }
 		if (!d || typeof d !== "object") return null;
 
+		const dungeonName = String(name || d.title || "Dungeon").trim() || "Dungeon";
 		const rooms = (Array.isArray(d.notes) ? d.notes : [])
 			.filter(n => n && (n.text || n.ref))
 			.map(n => ({ ref: (n.ref != null && n.ref !== "") ? String(n.ref) : null, text: String(n.text || "") }))
 			.sort((a, b) => (parseInt(a.ref, 10) || 0) - (parseInt(b.ref, 10) || 0));
 
-		const pages = [];
-		if (d.story) {
+		// Explicit sort keys: pages created in one batch otherwise share sort 0 and the
+		// sheet's room order is left to document-id ordering.
+		const pages = [{
+			name: "Overview", type: "text", title: { show: false }, sort: 0,
+			text: { content: RealmImporter._dungeonOverviewHtml(dungeonName, d.story, rooms), format: 1 },
+			flags: { [MODULE_ID]: { dungeonOverview: true } },
+		}];
+		rooms.forEach((r, i) => {
 			pages.push({
-				name: "Overview", type: "text", title: { show: false },
-				text: { content: `<p><em>${escapeHtml(String(d.story))}</em></p>`, format: 1 },
-			});
-		}
-		for (const r of rooms) {
-			const firstLine = (r.text.split("\n")[0] || "").trim();
-			const title = `${r.ref ? `${r.ref}. ` : ""}${firstLine || "Room"}`.slice(0, 60);
-			pages.push({
-				name: title,
-				type: "text", title: { show: true },
+				name: dungeonRoomTitle(r),
+				type: "text", title: { show: true }, sort: (i + 1) * 100,
 				text: { content: `<p>${escapeHtml(r.text).replace(/\n/g, "<br>")}</p>`, format: 1 },
 				flags: { [MODULE_ID]: { roomRef: r.ref } },
 			});
-		}
-		if (!pages.length) {
-			pages.push({ name: "Notes", type: "text", title: { show: false }, text: { content: "<p>(No room notes.)</p>", format: 1 } });
-		}
+		});
 
 		const je = await JournalEntry.create({
-			name: String(name || "Dungeon"),
+			name: dungeonName,
 			folder: folderId || null,
 			flags: { [MODULE_ID]: { dungeonKey: true } },
 			pages,
 		});
 
 		const pageByRef = {};
+		let overview = null;
 		for (const p of je.pages.contents) {
+			if (p.getFlag(MODULE_ID, "dungeonOverview")) overview = p;
 			const ref = p.getFlag(MODULE_ID, "roomRef");
 			if (ref != null) pageByRef[String(ref)] = p.id;
 		}
+		// Room index: only now do the pages have ids to link to.
+		if (overview && rooms.length) {
+			try {
+				await overview.update({
+					"text.content": RealmImporter._dungeonOverviewHtml(dungeonName, d.story, rooms, je.pages.contents),
+				});
+			} catch (e) { console.warn(`${MODULE_ID} | dungeon room index failed`, e); }
+		}
 		return { je, pageByRef };
+	}
+
+	/**
+	 * Overview-page HTML: the dungeon's description followed by a room index. Called
+	 * twice — once without `pageDocs` (plain list, before the entry exists) and once
+	 * with them, to rewrite the list as @UUID links to each room page.
+	 */
+	static _dungeonOverviewHtml(dungeonName, story, rooms, pageDocs = null) {
+		const parts = [`<h2>${escapeHtml(dungeonName)}</h2>`];
+		parts.push(story
+			? `<p><em>${escapeHtml(String(story))}</em></p>`
+			: `<p><em>No description was generated for this dungeon.</em></p>`);
+		if (rooms.length) {
+			const byRef = new Map();
+			for (const p of (pageDocs || [])) {
+				const ref = p.getFlag?.(MODULE_ID, "roomRef");
+				if (ref != null) byRef.set(String(ref), p);
+			}
+			parts.push(`<h3>Rooms</h3>`, `<ul style="list-style:none;padding-left:0.25em">`);
+			for (const r of rooms) {
+				const label = dungeonRoomTitle(r);
+				const page = r.ref != null ? byRef.get(String(r.ref)) : null;
+				// A @UUID label is inserted as text by the enricher, so it must NOT be escaped.
+				parts.push(`<li>${page ? `@UUID[${page.uuid}]{${label}}` : `<strong>${escapeHtml(label)}</strong>`}</li>`);
+			}
+			parts.push(`</ul>`);
+		}
+		return parts.join("\n");
 	}
 
 	/** One delegated listener handles "Generate this map" + "Open scene" clicks, any sheet version. */

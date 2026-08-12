@@ -920,9 +920,12 @@ export class MaphubViewerApp extends ApplicationV2 {
 		try {
 			let sceneName;
 			const caveName = (this._mapType === "cave") ? this._getCaveModel()?.name : null;
+			// The dungeon JSON was exported just above, so its title is available here.
+			const dungeonName = isDungeon ? this._getDungeonName() : null;
 			if (this._importContext?.sceneName) sceneName = this._importContext.sceneName;
 			else if (isRealm && realmData?.name) sceneName = realmData.name;
 			else if (caveName) sceneName = caveName;
+			else if (dungeonName) sceneName = dungeonName;
 			else sceneName = `${this._getMapLabel()} ${new Date().toLocaleString()}`;
 			let grid = this._getImportGridSize();
 
@@ -1053,10 +1056,11 @@ export class MaphubViewerApp extends ApplicationV2 {
 				await scene.createEmbeddedDocuments("Wall", walls);
 			}
 			// Dungeon pins link back to a journal: a standalone dungeon gets its own
-			// JournalEntry (story + one page per numbered room); a realm-location dungeon
-			// points at its location journal (whose room key is folded in below). Each
-			// numbered pin deep-links to its room's page when one exists.
-			if (isDungeon && notes.length) {
+			// JournalEntry (Overview page + one page per numbered room); a realm-location
+			// dungeon points at its location journal (whose room key is folded in below).
+			// Each numbered pin deep-links to its room's page when one exists. Built even
+			// with no pins, so the dungeon's description still lands in a journal.
+			if (isDungeon) {
 				try {
 					const { RealmImporter } = await import("./RealmImporter.mjs");
 					let entryId = null, pageByRef = null;
@@ -1071,7 +1075,7 @@ export class MaphubViewerApp extends ApplicationV2 {
 							try { await scene.update({ journal: made.je.id }); } catch { /* non-fatal */ }
 						}
 					}
-					if (entryId) {
+					if (entryId && notes.length) {
 						notes = notes.map(n => {
 							const o = { ...n, entryId };
 							const pid = (pageByRef && n.ref != null) ? pageByRef[String(n.ref)] : null;
@@ -1965,6 +1969,27 @@ export class MaphubViewerApp extends ApplicationV2 {
 	_getDungeonController() {
 		try {
 			return this._iframe?.contentWindow?.__sdxDungeonView ?? null;
+		} catch (_) {
+			return null;
+		}
+	}
+
+	/**
+	 * The dungeon's own generated name ("The Sunken Vaults of …"), used to label the
+	 * imported scene and its journal instead of a "Dungeon Map <timestamp>" placeholder.
+	 * `getData()` exposes it as `title`; fall back to the live controller's `story.name`
+	 * (the same string the generator prints at the top of the page).
+	 * @returns {string|null}
+	 */
+	_getDungeonName() {
+		const clean = (v) => {
+			const s = (v == null ? "" : String(v)).trim();
+			return s || null;
+		};
+		try {
+			const fromJson = clean(this._lastSavedDungeonJson?.title);
+			if (fromJson) return fromJson;
+			return clean(this._getDungeonController()?.dungeon?.story?.name);
 		} catch (_) {
 			return null;
 		}
